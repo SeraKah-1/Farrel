@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import "./globals.css"; // <--- INI BARIS SAKTI YANG KEMARIN HILANG
+import "./globals.css"; // Pastikan baris ini ada!
 import { Toaster } from "sonner";
+import { Navbar } from "@/components/ui/navbar"; // Import Navbar yang baru dibuat
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -17,18 +18,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id">
-      {/* Tambahkan class flex flex-col min-h-screen agar footer selalu di bawah */}
       <body className={`${inter.className} min-h-screen flex flex-col bg-slate-50 text-slate-900`}>
         
-        {/* Konten Utama Game */}
+        {/* 1. Pasang Navbar di paling atas */}
+        <Navbar />
+
+        {/* 2. Konten Utama */}
         <main className="flex-1 flex flex-col">
           {children}
         </main>
         
-        {/* Notifikasi Pop-up */}
+        {/* 3. Notifikasi */}
         <Toaster richColors position="top-center" />
 
-        {/* --- FOOTER COPYRIGHT FARREL --- */}
+        {/* 4. Footer Copyright */}
         <footer className="py-6 border-t border-slate-200 bg-white mt-auto">
           <div className="container mx-auto px-4 text-center">
             <p className="text-sm text-slate-500">
