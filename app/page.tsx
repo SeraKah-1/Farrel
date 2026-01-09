@@ -1,91 +1,131 @@
 'use client';
 
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { createClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Stethoscope, ShieldAlert, BrainCircuit, Play } from 'lucide-react';
-import { useEffect } from 'react';
+import Link from 'next/link';
+import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Plus, Play, Loader2, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 
-export default function Home() {
-  
-  // --- FITUR RAHASIA: CONSOLE LOG WARNING ---
+export default function LobbyPage() {
+  const [cases, setCases] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const supabase = createClient();
+  const router = useRouter();
+
+  // 1. Ambil daftar kasus yang sudah ada di Database
   useEffect(() => {
-    console.clear();
-    console.log(
-      "%c🛑 STOP! JANGAN DICURI! 🛑", 
-      "color: red; font-size: 30px; font-weight: bold; text-shadow: 2px 2px black;"
-    );
-    console.log(
-      "%cWebsite ini dikembangkan oleh FARREL.\nHak cipta dilindungi undang-undang coding sedunia.\nJika ingin belajar, silakan kontak developernya.", 
-      "color: blue; font-size: 16px; font-family: monospace;"
-    );
-    console.log(
-      "%cGitHub: https://github.com/SeraKah-1", 
-      "color: black; font-size: 14px; font-weight: bold; text-decoration: underline;"
-    );
+    fetchCases();
   }, []);
-  // ------------------------------------------
+
+  async function fetchCases() {
+    const { data, error } = await supabase
+      .from('disease_cards')
+      .select('id, title, difficulty, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching cases:', error);
+    } else {
+      setCases(data || []);
+    }
+    setLoading(false);
+  }
+
+  // 2. Fungsi untuk Generate Kasus Baru pakai AI
+  const handleGenerate = async () => {
+    setGenerating(true);
+    toast.info("Sedang menghubungi AI Dokter... (Bisa memakan waktu 10-20 detik)");
+
+    try {
+      const res = await fetch('/api/generate', { method: 'POST' });
+      
+      if (!res.ok) throw new Error('Gagal generate');
+
+      const data = await res.json();
+      
+      if (data.success) {
+        toast.success("Kasus baru berhasil dibuat!");
+        // Refresh daftar kasus
+        fetchCases();
+        // Opsional: Langsung masuk ke gamenya
+        router.push(`/play/${data.id}`);
+      } else {
+        throw new Error(data.error || "Gagal membuat kasus");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal membuat kasus. Pastikan API Key & Koneksi aman.");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
-      <div className="max-w-3xl w-full text-center space-y-8 animate-in fade-in zoom-in duration-700">
+    <div className="min-h-screen bg-slate-50 p-8">
+      <div className="max-w-4xl mx-auto space-y-8">
         
-        {/* Hero Section */}
-        <div className="space-y-4">
-          <div className="bg-blue-100 p-4 rounded-full w-20 h-20 mx-auto flex items-center justify-center mb-6 shadow-lg">
-            <Stethoscope size={40} className="text-blue-600" />
+        {/* Header Lobby */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Daftar Kasus Pasien</h1>
+            <p className="text-slate-500">Pilih pasien untuk memulai diagnosa atau terima pasien baru.</p>
           </div>
-          <h1 className="text-5xl font-black text-slate-900 tracking-tight">
-            Medical <span className="text-blue-600">Detective</span>
-          </h1>
-          <p className="text-xl text-slate-600 max-w-lg mx-auto leading-relaxed">
-            Uji kemampuan medismu. Analisis gejala, periksa lab, dan selamatkan nyawa pasien sebelum waktu habis.
-          </p>
-        </div>
-
-        {/* Feature Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-          <Card className="border-blue-100 shadow-sm hover:shadow-md transition-all bg-white/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <BrainCircuit className="text-purple-500 mb-2" />
-              <CardTitle className="text-base">AI Generated</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>Kasus penyakit tanpa batas dibuat otomatis oleh AI.</CardDescription>
-            </CardContent>
-          </Card>
           
-          <Card className="border-blue-100 shadow-sm hover:shadow-md transition-all bg-white/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <ShieldAlert className="text-red-500 mb-2" />
-              <CardTitle className="text-base">Critical Mode</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>Salah diagnosa? Nyawa pasien taruhannya.</CardDescription>
-            </CardContent>
-          </Card>
-
-          <Card className="border-blue-100 shadow-sm hover:shadow-md transition-all bg-white/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <Stethoscope className="text-green-500 mb-2" />
-              <CardTitle className="text-base">Real Simulation</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>Cek tanda vital dan lab layaknya dokter sungguhan.</CardDescription>
-            </CardContent>
-          </Card>
+          {/* --- INI TOMBOL GENERATE YANG KAMU CARI --- */}
+          <Button 
+            onClick={handleGenerate} 
+            disabled={generating} 
+            size="lg" 
+            className="shadow-lg hover:shadow-xl transition-all"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sedang Membuat...
+              </>
+            ) : (
+              <>
+                <Plus className="mr-2 h-5 w-5" /> Terima Pasien Baru (AI)
+              </>
+            )}
+          </Button>
         </div>
 
-        {/* Call to Action */}
-        <div className="pt-8">
-          <Link href="/play">
-            <Button size="lg" className="h-14 px-8 text-lg font-bold shadow-xl shadow-blue-200 hover:shadow-blue-300 transition-all hover:-translate-y-1">
-              <Play className="mr-2 fill-current" /> MULAI PRAKTEK
-            </Button>
-          </Link>
-          <p className="text-xs text-slate-400 mt-4">v1.0.0 (Detective Update) • Created by Farrel</p>
-        </div>
-
+        {/* List Kasus */}
+        {loading ? (
+          <div className="text-center py-20 text-slate-400">Loading data...</div>
+        ) : cases.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-300">
+            <AlertCircle className="h-10 w-10 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-slate-900">Belum ada kasus</h3>
+            <p className="text-slate-500 mb-6">Klik tombol "Terima Pasien Baru" di pojok kanan atas.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {cases.map((game) => (
+              <Card key={game.id} className="hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group" onClick={() => router.push(`/play/${game.id}`)}>
+                <CardHeader>
+                  <CardTitle className="line-clamp-1 group-hover:text-blue-600 transition-colors">
+                    {game.title || "Kasus Misterius"}
+                  </CardTitle>
+                  <CardDescription>
+                    Tingkat Kesulitan: <span className="font-medium text-slate-700">{game.difficulty || "Normal"}</span>
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter>
+                  <Link href={`/play/${game.id}`} className="w-full">
+                    <Button variant="secondary" className="w-full group-hover:bg-blue-50 group-hover:text-blue-600">
+                      <Play className="mr-2 h-4 w-4" /> Mulai Diagnosa
+                    </Button>
+                  </Link>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
