@@ -1,22 +1,23 @@
 'use client';
 
 import { useEffect, useState, use } from 'react';
-import { supabase } from '@/lib/supabase';
+// Pastikan path import ini sesuai struktur folder kamu
+import { createClient } from '@/utils/supabase/client'; 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
 import { Activity, Thermometer, TestTube, MessageCircle, HeartPulse, Stethoscope, BookOpen, AlertCircle, CheckCircle, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import useSound from 'use-sound'; // Import Audio
+import useSound from 'use-sound';
 
 export default function GameRoom({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const id = resolvedParams.id;
   const router = useRouter();
+  const supabase = createClient();
 
   // --- AUDIO HOOKS ---
-  // Pastikan file mp3 ada di folder public/sounds/
   const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
   const [playCorrect] = useSound('/sounds/correct.mp3', { volume: 0.5 });
   const [playWrong] = useSound('/sounds/wrong.mp3', { volume: 0.5 });
@@ -36,15 +37,64 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
 
   useEffect(() => {
     async function fetchGame() {
-      // Simulasi delay sedikit biar Skeleton kelihatan keren (opsional)
+      // Simulasi delay sedikit biar Skeleton kelihatan
       await new Promise(r => setTimeout(r, 1000)); 
       
       const { data } = await supabase.from('disease_cards').select('*').eq('id', id).single();
+      
       if (data) {
-        setCard(data);
+        // --- ⚡ FITUR ADAPTER: UBAH DATA BARU JADI FORMAT LAMA ⚡ ---
+        let normalizedContent;
+
+        if (data.scenario) {
+          // KASUS BARU (Data ada di kolom 'scenario')
+          normalizedContent = {
+            simulation: {
+              // Gunakan history pasien sebagai keluhan utama
+              chief_complaint: data.scenario.patient.history,
+              diagnosis_answer: data.correct_diagnosis,
+              
+              // Konversi Gejala menjadi "Wawancara"
+              interview_questions: data.scenario.symptoms?.map((s: string, idx: number) => ({
+                question: `Tanya gejala klinis #${idx + 1}`,
+                answer: s,
+                is_relevant: true
+              })) || [],
+
+              // Konversi Lab Results agar masuk ke slot Lab (karena AI baru menggabung vitals & lab)
+              lab_abnormalities: data.scenario.lab_results?.map((res: string) => ({
+                name: "Hasil Pemeriksaan",
+                value: res
+              })) || [],
+
+              // Dummy Vitals (Karena AI baru sering menggabungnya di Lab)
+              // Kita set default agar tidak crash
+              vital_signs: {
+                systolic: 120, diastolic: 80, heart_rate: 80, temperature: 36.5, resp_rate: 18
+              },
+
+              diagnosis_options: data.scenario.options
+            },
+            wiki: {
+              definition: data.scenario.explanation,
+              clinical_signs: data.scenario.symptoms,
+              treatment_guideline: "Lakukan penanganan sesuai prosedur medis standar."
+            }
+          };
+        } else {
+          // KASUS LAMA (Data ada di kolom 'content' lama)
+          // Cek apakah content string atau object
+          normalizedContent = typeof data.content === 'string' 
+            ? JSON.parse(data.content) 
+            : data.content;
+        }
+
+        const gameData = { ...data, content: normalizedContent };
+        setCard(gameData);
+        
         setLogs([{ 
           sender: 'System', 
-          text: `PASIEN BARU MASUK. Keluhan: "${data.content.simulation.chief_complaint}"`, 
+          text: `PASIEN BARU MASUK. Riwayat: "${gameData.content.simulation.chief_complaint}"`, 
           type: 'info' 
         }]);
       }
@@ -64,7 +114,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
 
   const consumeEnergy = (amount: number) => {
     if (energy - amount < 0) {
-      playFlatline(); // Sound Effect: Meninggal
+      playFlatline?.(); 
       toast.error("ENERGI HABIS!");
       setGameState('lost');
       addLog('System', 'Dokter kelelahan. Pasien dirujuk ke RS lain (GAME OVER).', 'alert');
@@ -77,7 +127,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
 
   const handleAsk = (index: number, q: any) => {
     if (gameState !== 'playing') return;
-    playClick(); // Sound Effect: Klik
+    playClick?.();
     if (!consumeEnergy(COSTS.ASK)) return;
 
     setAskedQuestions(prev => [...prev, index]);
@@ -95,7 +145,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
 
   const revealData = (type: 'vitals' | 'labs') => {
     if (gameState !== 'playing') return;
-    playClick(); // Sound Effect: Klik
+    playClick?.();
     const cost = type === 'vitals' ? COSTS.VITALS : COSTS.LABS;
     
     if (!dataRevealed[type]) {
@@ -111,18 +161,18 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
     const correctAnswer = card.content.simulation.diagnosis_answer;
     
     if (option === correctAnswer) {
-      playCorrect(); // Sound Effect: Menang
+      playCorrect?.();
       setGameState('won');
       addLog('System', `🏆 DIAGNOSA TEPAT! (${correctAnswer}). Pasien selamat.`, 'success');
       toast.success("SEMPURNA! Pasien Selamat.");
     } else {
-      playWrong(); // Sound Effect: Salah
+      playWrong?.();
       const penalty = 50;
       toast.error("DIAGNOSA SALAH!");
       addLog('System', `❌ SALAH! Bukan ${option}. Kondisi pasien kritis! (-${penalty} Energi)`, 'alert');
       
       if (energy - penalty <= 0) {
-        playFlatline(); // Sound Effect: Meninggal
+        playFlatline?.();
         setEnergy(0);
         setGameState('lost');
         addLog('System', 'Pasien meninggal karena salah penanganan.', 'alert');
@@ -136,12 +186,10 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-4 font-sans h-[calc(100vh-2rem)] flex flex-col md:flex-row gap-4">
-        {/* Kiri Skeleton */}
         <div className="flex-1 flex flex-col gap-4 h-full">
-          <Skeleton className="h-24 w-full rounded-xl" /> {/* Energy Bar */}
-          <Skeleton className="flex-1 w-full rounded-xl" /> {/* Chat Area */}
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="flex-1 w-full rounded-xl" />
         </div>
-        {/* Kanan Skeleton */}
         <div className="w-full md:w-[400px] flex flex-col gap-3">
           <Skeleton className="h-40 w-full rounded-xl" />
           <Skeleton className="h-32 w-full rounded-xl" />
@@ -152,6 +200,8 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
     );
   }
   
+  if (!card) return <div className="text-center p-10">Data Kasus Tidak Ditemukan</div>;
+
   const sim = card.content.simulation;
   const wiki = card.content.wiki;
 
@@ -226,15 +276,15 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
                 </div>
                 <div>
                    <p className="text-sm text-slate-700 font-medium leading-relaxed">
-                     <span className="font-bold text-slate-900">Definisi:</span> {wiki.definition}
+                     <span className="font-bold text-slate-900">Penjelasan:</span> {wiki.definition}
                    </p>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                   <h4 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1"><AlertCircle size={12}/> Gejala Khas</h4>
+                   <h4 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1"><AlertCircle size={12}/> Gejala Klinis</h4>
                    <ul className="text-sm text-slate-700 list-disc list-inside bg-slate-50 p-2 rounded">
-                     {wiki.clinical_signs.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                     {wiki.clinical_signs?.map((s: string, i: number) => <li key={i}>{s}</li>)}
                    </ul>
                 </div>
                 <div className="space-y-1">
@@ -246,8 +296,8 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
               </div>
             </CardContent>
             <CardFooter className="bg-slate-50 pt-4">
-               <Button className="w-full h-12 text-lg font-bold" onClick={() => router.push('/play')}>
-                 Tangani Pasien Berikutnya 👉
+               <Button className="w-full h-12 text-lg font-bold" onClick={() => router.push('/')}>
+                 Kembali ke Lobby 👉
                </Button>
             </CardFooter>
           </Card>
@@ -320,13 +370,13 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
               </Button>
             ) : (
               <div className="bg-purple-50 p-2 rounded border border-purple-200 text-xs space-y-2">
-                <p className="font-bold text-purple-900 border-b border-purple-200 pb-1">HASIL ABNORMAL:</p>
+                <p className="font-bold text-purple-900 border-b border-purple-200 pb-1">HASIL PEMERIKSAAN:</p>
                 {sim.lab_abnormalities?.length > 0 ? sim.lab_abnormalities.map((lab: any, i: number) => (
                   <div key={i} className="flex justify-between items-center">
                     <span>{lab.name}</span>
                     <span className="font-bold text-red-600 bg-red-50 px-1 rounded">{lab.value}</span>
                   </div>
-                )) : <p className="text-slate-500 italic">Tidak ditemukan kelainan signifikan.</p>}
+                )) : <p className="text-slate-500 italic">Tidak ditemukan kelainan spesifik.</p>}
               </div>
             )}
           </CardContent>

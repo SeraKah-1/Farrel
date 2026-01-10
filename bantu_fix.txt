@@ -1,0 +1,1003 @@
+'use client';
+
+import { useEffect, useState, use } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Activity, Thermometer, TestTube, MessageCircle, HeartPulse, Stethoscope, BookOpen, AlertCircle, CheckCircle, Volume2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
+import useSound from 'use-sound'; // Import Audio
+
+export default function GameRoom({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const id = resolvedParams.id;
+  const router = useRouter();
+
+  // --- AUDIO HOOKS ---
+  // Pastikan file mp3 ada di folder public/sounds/
+  const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
+  const [playCorrect] = useSound('/sounds/correct.mp3', { volume: 0.5 });
+  const [playWrong] = useSound('/sounds/wrong.mp3', { volume: 0.5 });
+  const [playFlatline] = useSound('/sounds/flatline.mp3', { volume: 0.4 });
+
+  const [card, setCard] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // --- GAME STATE ---
+  const [energy, setEnergy] = useState(100); 
+  const [logs, setLogs] = useState<{sender: string, text: string, type: 'info'|'chat'|'alert'|'success'}[]>([]);
+  const [askedQuestions, setAskedQuestions] = useState<number[]>([]); 
+  const [dataRevealed, setDataRevealed] = useState({ vitals: false, labs: false });
+  const [gameState, setGameState] = useState<'playing' | 'won' | 'lost'>('playing');
+
+  const COSTS = { ASK: 10, VITALS: 25, LABS: 40 };
+
+  useEffect(() => {
+    async function fetchGame() {
+      // Simulasi delay sedikit biar Skeleton kelihatan keren (opsional)
+      await new Promise(r => setTimeout(r, 1000)); 
+      
+      const { data } = await supabase.from('disease_cards').select('*').eq('id', id).single();
+      if (data) {
+        setCard(data);
+        setLogs([{ 
+          sender: 'System', 
+          text: `PASIEN BARU MASUK. Keluhan: "${data.content.simulation.chief_complaint}"`, 
+          type: 'info' 
+        }]);
+      }
+      setLoading(false);
+    }
+    fetchGame();
+  }, [id]);
+
+  useEffect(() => {
+    const el = document.getElementById('chat-container');
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [logs]);
+
+  const addLog = (sender: string, text: string, type: 'info'|'chat'|'alert'|'success') => {
+    setLogs(prev => [...prev, { sender, text, type }]);
+  };
+
+  const consumeEnergy = (amount: number) => {
+    if (energy - amount < 0) {
+      playFlatline(); // Sound Effect: Meninggal
+      toast.error("ENERGI HABIS!");
+      setGameState('lost');
+      addLog('System', 'Dokter kelelahan. Pasien dirujuk ke RS lain (GAME OVER).', 'alert');
+      setEnergy(0);
+      return false;
+    }
+    setEnergy(prev => prev - amount);
+    return true;
+  };
+
+  const handleAsk = (index: number, q: any) => {
+    if (gameState !== 'playing') return;
+    playClick(); // Sound Effect: Klik
+    if (!consumeEnergy(COSTS.ASK)) return;
+
+    setAskedQuestions(prev => [...prev, index]);
+    addLog('Dokter', q.question, 'chat');
+    
+    setTimeout(() => {
+      if (q.is_relevant) {
+        addLog('Pasien', q.answer, 'chat');
+      } else {
+        addLog('Pasien', `${q.answer} (Pasien tampak bingung)`, 'chat');
+        toast.warning("Pertanyaan kurang relevan.");
+      }
+    }, 600);
+  };
+
+  const revealData = (type: 'vitals' | 'labs') => {
+    if (gameState !== 'playing') return;
+    playClick(); // Sound Effect: Klik
+    const cost = type === 'vitals' ? COSTS.VITALS : COSTS.LABS;
+    
+    if (!dataRevealed[type]) {
+      if (!consumeEnergy(cost)) return;
+      setDataRevealed(prev => ({ ...prev, [type]: true }));
+      addLog('System', type === 'vitals' ? "Perawat memeriksa tanda vital..." : "Sampel darah dikirim ke lab...", 'info');
+    }
+  };
+
+  const handleGuess = (option: string) => {
+    if (gameState !== 'playing') return;
+
+    const correctAnswer = card.content.simulation.diagnosis_answer;
+    
+    if (option === correctAnswer) {
+      playCorrect(); // Sound Effect: Menang
+      setGameState('won');
+      addLog('System', `🏆 DIAGNOSA TEPAT! (${correctAnswer}). Pasien selamat.`, 'success');
+      toast.success("SEMPURNA! Pasien Selamat.");
+    } else {
+      playWrong(); // Sound Effect: Salah
+      const penalty = 50;
+      toast.error("DIAGNOSA SALAH!");
+      addLog('System', `❌ SALAH! Bukan ${option}. Kondisi pasien kritis! (-${penalty} Energi)`, 'alert');
+      
+      if (energy - penalty <= 0) {
+        playFlatline(); // Sound Effect: Meninggal
+        setEnergy(0);
+        setGameState('lost');
+        addLog('System', 'Pasien meninggal karena salah penanganan.', 'alert');
+      } else {
+        setEnergy(prev => prev - penalty);
+      }
+    }
+  };
+
+  // --- TAMPILAN SKELETON (LOADING) ---
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto p-4 font-sans h-[calc(100vh-2rem)] flex flex-col md:flex-row gap-4">
+        {/* Kiri Skeleton */}
+        <div className="flex-1 flex flex-col gap-4 h-full">
+          <Skeleton className="h-24 w-full rounded-xl" /> {/* Energy Bar */}
+          <Skeleton className="flex-1 w-full rounded-xl" /> {/* Chat Area */}
+        </div>
+        {/* Kanan Skeleton */}
+        <div className="w-full md:w-[400px] flex flex-col gap-3">
+          <Skeleton className="h-40 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-48 w-full rounded-xl mt-auto" />
+        </div>
+      </div>
+    );
+  }
+  
+  const sim = card.content.simulation;
+  const wiki = card.content.wiki;
+
+  return (
+    <div className="max-w-6xl mx-auto p-4 font-sans min-h-[calc(100vh-2rem)] flex flex-col md:flex-row gap-4">
+      
+      {/* --- PANEL KIRI (Log & Edukasi) --- */}
+      <div className="flex-1 flex flex-col gap-4 h-full">
+        {/* Energy Bar */}
+        <Card className="bg-slate-900 text-white border-none shadow-xl shrink-0">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full ${energy < 30 ? 'bg-red-600 animate-pulse' : 'bg-blue-600'}`}>
+                <HeartPulse size={24} className="text-white" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Stamina Dokter</p>
+                <div className="w-full md:w-64 h-3 bg-slate-800 rounded-full mt-1 overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-700 ease-out ${energy < 30 ? 'bg-red-500' : energy < 60 ? 'bg-amber-400' : 'bg-green-500'}`} 
+                    style={{ width: `${energy}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-3xl font-black">{energy}</span>
+              <span className="text-sm text-slate-500">/100 AP</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* LOG GAMEPLAY */}
+        <Card className={`bg-slate-50 border-slate-200 overflow-hidden flex flex-col shadow-inner transition-all duration-500 ${gameState !== 'playing' ? 'h-[300px]' : 'flex-1'}`}>
+          <CardHeader className="py-3 px-4 bg-white border-b flex flex-row items-center gap-2">
+            <Activity size={16} className="text-slate-400"/> 
+            <span className="text-sm font-bold text-slate-600">Rekam Medis & Observasi</span>
+          </CardHeader>
+          <div id="chat-container" className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
+            {logs.map((log, i) => (
+              <div key={i} className={`flex flex-col max-w-[90%] ${log.sender === 'Dokter' ? 'ml-auto items-end' : 'items-start'}`}>
+                {log.sender !== 'System' && (
+                  <span className="text-[10px] font-bold text-slate-400 mb-1 px-1">{log.sender}</span>
+                )}
+                <div className={`px-4 py-2 rounded-2xl text-sm shadow-sm ${
+                  log.sender === 'Dokter' ? 'bg-blue-600 text-white rounded-tr-none' : 
+                  log.sender === 'System' ? 'w-full max-w-full text-center bg-slate-200 text-slate-600 rounded-lg text-xs font-mono py-1' :
+                  log.type === 'alert' ? 'bg-red-100 text-red-800 border border-red-200' :
+                  log.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200 font-bold' :
+                  'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
+                }`}>
+                  {log.text}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* 🔥 FITUR EDUKASI (Hanya Muncul Saat Game Selesai) */}
+        {gameState !== 'playing' && (
+          <Card className="border-blue-200 shadow-xl border-t-4 border-t-blue-500 animate-in slide-in-from-bottom-10 fade-in duration-700">
+            <CardHeader className="pb-2 bg-blue-50/50">
+               <CardTitle className="flex items-center gap-2 text-blue-900">
+                 <BookOpen className="w-5 h-5"/> Laporan Medis & Pembahasan
+               </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="bg-slate-100 p-3 rounded-lg min-w-[120px] text-center">
+                   <p className="text-xs text-slate-500 uppercase font-bold">Diagnosa Benar</p>
+                   <p className="text-lg font-black text-blue-600 leading-tight mt-1">{sim.diagnosis_answer}</p>
+                </div>
+                <div>
+                   <p className="text-sm text-slate-700 font-medium leading-relaxed">
+                     <span className="font-bold text-slate-900">Definisi:</span> {wiki.definition}
+                   </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                   <h4 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1"><AlertCircle size={12}/> Gejala Khas</h4>
+                   <ul className="text-sm text-slate-700 list-disc list-inside bg-slate-50 p-2 rounded">
+                     {wiki.clinical_signs.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                   </ul>
+                </div>
+                <div className="space-y-1">
+                   <h4 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1"><CheckCircle size={12}/> Penanganan</h4>
+                   <p className="text-sm text-slate-700 bg-green-50 p-2 rounded border border-green-100">
+                     {wiki.treatment_guideline}
+                   </p>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="bg-slate-50 pt-4">
+               <Button className="w-full h-12 text-lg font-bold" onClick={() => router.push('/play')}>
+                 Tangani Pasien Berikutnya 👉
+               </Button>
+            </CardFooter>
+          </Card>
+        )}
+      </div>
+
+      {/* --- PANEL KANAN (Actions) --- */}
+      <div className="w-full md:w-[400px] flex flex-col gap-3 h-full overflow-y-auto pr-1">
+        
+        {/* WAWANCARA */}
+        <Card className={`border-l-4 border-l-blue-500 transition-all duration-500 ${gameState !== 'playing' ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
+          <CardHeader className="py-2 px-4 bg-blue-50/50">
+            <CardTitle className="text-sm text-blue-800 flex justify-between items-center">
+              <span className="flex items-center gap-2"><MessageCircle size={16}/> Wawancara</span>
+              <span className="text-xs bg-blue-200 px-2 py-0.5 rounded text-blue-800">-{COSTS.ASK} AP</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 space-y-2">
+            {sim.interview_questions?.map((q: any, i: number) => (
+              <Button 
+                key={i} 
+                variant="outline" 
+                size="sm"
+                className={`w-full justify-start h-auto py-2 text-xs text-left whitespace-normal ${askedQuestions.includes(i) ? 'bg-slate-100 text-slate-400 line-through' : 'hover:border-blue-500 hover:bg-blue-50'}`}
+                onClick={() => handleAsk(i, q)}
+                disabled={askedQuestions.includes(i)}
+              >
+                {q.question}
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* PERIKSA FISIK */}
+        <Card className={`border-l-4 border-l-amber-500 transition-all duration-500 ${gameState !== 'playing' ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
+          <CardHeader className="py-2 px-4 bg-amber-50/50">
+            <CardTitle className="text-sm text-amber-800 flex justify-between items-center">
+              <span className="flex items-center gap-2"><Thermometer size={16}/> Tanda Vital</span>
+              <span className="text-xs bg-amber-200 px-2 py-0.5 rounded text-amber-800">-{COSTS.VITALS} AP</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3">
+            {!dataRevealed.vitals ? (
+              <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" onClick={() => revealData('vitals')}>
+                Lakukan Pemeriksaan
+              </Button>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 text-sm bg-amber-50 p-2 rounded border border-amber-200">
+                <div><span className="text-slate-500 text-xs">Tensi</span><br/><b>{sim.vital_signs.systolic}/{sim.vital_signs.diastolic}</b></div>
+                <div><span className="text-slate-500 text-xs">Nadi</span><br/><b>{sim.vital_signs.heart_rate} bpm</b></div>
+                <div><span className="text-slate-500 text-xs">Suhu</span><br/><b>{sim.vital_signs.temperature}°C</b></div>
+                <div><span className="text-slate-500 text-xs">Napas</span><br/><b>{sim.vital_signs.resp_rate} x/m</b></div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* LAB */}
+        <Card className={`border-l-4 border-l-purple-500 transition-all duration-500 ${gameState !== 'playing' ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
+          <CardHeader className="py-2 px-4 bg-purple-50/50">
+            <CardTitle className="text-sm text-purple-800 flex justify-between items-center">
+              <span className="flex items-center gap-2"><TestTube size={16}/> Laboratorium</span>
+              <span className="text-xs bg-purple-200 px-2 py-0.5 rounded text-purple-800">-{COSTS.LABS} AP</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3">
+            {!dataRevealed.labs ? (
+              <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" onClick={() => revealData('labs')}>
+                Ambil Sampel Darah
+              </Button>
+            ) : (
+              <div className="bg-purple-50 p-2 rounded border border-purple-200 text-xs space-y-2">
+                <p className="font-bold text-purple-900 border-b border-purple-200 pb-1">HASIL ABNORMAL:</p>
+                {sim.lab_abnormalities?.length > 0 ? sim.lab_abnormalities.map((lab: any, i: number) => (
+                  <div key={i} className="flex justify-between items-center">
+                    <span>{lab.name}</span>
+                    <span className="font-bold text-red-600 bg-red-50 px-1 rounded">{lab.value}</span>
+                  </div>
+                )) : <p className="text-slate-500 italic">Tidak ditemukan kelainan signifikan.</p>}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* DIAGNOSA */}
+        <Card className={`border-l-4 border-l-slate-800 bg-slate-50 shadow-md mt-auto transition-all duration-500 ${gameState !== 'playing' ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
+          <CardHeader className="py-2 px-4 bg-slate-800 text-white">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Stethoscope size={16}/> Tentukan Diagnosa
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-2 space-y-2">
+             {sim.diagnosis_options?.map((option: string, i: number) => (
+              <Button 
+                key={i} 
+                variant="secondary" 
+                className="w-full justify-start text-xs h-auto py-3 whitespace-normal bg-white border border-slate-200 hover:bg-slate-800 hover:text-white transition-colors"
+                onClick={() => handleGuess(option)}
+              >
+                {option}
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}'use client';
+
+import { useEffect, useState } from 'react';
+// ✅ Import yang sudah diperbaiki (Mundur 2 folder untuk cari utils di root)
+import { createClient } from '@/utils/supabase/client';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Plus, Play, Loader2, Sparkles, Target, X, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
+
+export default function LobbyPage() {
+  // --- STATE ---
+  const [cases, setCases] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  
+  // State untuk Popup (Modal) Request Kasus
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [customTopic, setCustomTopic] = useState("");
+  const [selectedDifficulty, setSelectedDifficulty] = useState("random");
+
+  const supabase = createClient();
+  const router = useRouter();
+
+  // --- EFFECT ---
+  useEffect(() => {
+    fetchCases();
+  }, []);
+
+  // --- FUNCTIONS ---
+  async function fetchCases() {
+    const { data, error } = await supabase
+      .from('disease_cards')
+      .select('id, title, difficulty, created_at')
+      .order('created_at', { ascending: false });
+
+    if (!error) setCases(data || []);
+    setLoading(false);
+  }
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setIsModalOpen(false); // Tutup modal biar rapi
+    
+    const toastId = toast.loading("Sedang menghubungi AI Dokter...");
+
+    try {
+      // Kirim request ke API dengan data Topik & Difficulty
+      const res = await fetch('/api/generate', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          topic: customTopic, 
+          difficulty: selectedDifficulty 
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        toast.dismiss(toastId);
+        toast.success("Pasien baru siap diperiksa!");
+        
+        // Refresh list kasus
+        fetchCases();
+        
+        // Langsung arahkan user ke halaman main
+        router.push(`/play/${data.id}`);
+        
+        // Reset form modal
+        setCustomTopic("");
+        setSelectedDifficulty("random");
+      } else {
+        throw new Error(data.error || "Gagal membuat kasus");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.dismiss(toastId);
+      toast.error("Gagal membuat kasus. Coba lagi nanti.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // --- RENDER ---
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+      <div className="max-w-5xl mx-auto space-y-8">
+        
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Lobby Praktek</h1>
+            <p className="text-slate-500">Pilih pasien untuk memulai diagnosa hari ini.</p>
+          </div>
+          
+          {/* Tombol Buka Modal */}
+          <Button 
+            onClick={() => setIsModalOpen(true)} 
+            size="lg" 
+            className="bg-blue-600 hover:bg-blue-700 shadow-md transition-all"
+          >
+            <Plus className="mr-2 h-5 w-5" /> Terima Pasien Baru
+          </Button>
+        </div>
+
+        {/* --- MODAL POPUP (REQUEST KASUS) --- */}
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
+              
+              {/* Header Modal */}
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="font-bold text-lg text-slate-800">Buat Skenario Pasien</h3>
+                <button 
+                  onClick={() => setIsModalOpen(false)} 
+                  className="text-slate-400 hover:text-red-500 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Body Modal */}
+              <div className="p-6 space-y-5">
+                {/* Input Topik */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Keluhan / Penyakit (Opsional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Contoh: Demam Berdarah, Jantung..."
+                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm transition-all"
+                    value={customTopic}
+                    onChange={(e) => setCustomTopic(e.target.value)}
+                  />
+                  <p className="text-xs text-slate-400">Biarkan kosong jika ingin penyakit acak.</p>
+                </div>
+
+                {/* Input Difficulty */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Tingkat Kesulitan</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['random', 'Easy', 'Medium', 'Hard'].map((diff) => (
+                      <button
+                        key={diff}
+                        onClick={() => setSelectedDifficulty(diff)}
+                        className={`text-sm py-2 px-1 rounded-lg border transition-all ${
+                          selectedDifficulty === diff 
+                            ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold ring-1 ring-blue-500' 
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                      >
+                        {diff === 'random' ? 'Acak' : diff}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Modal */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
+                  Batal
+                </Button>
+                <Button 
+                  onClick={handleGenerate} 
+                  disabled={generating} 
+                  className="bg-slate-900 text-white hover:bg-slate-800 min-w-[140px]"
+                >
+                  {generating ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Meracik...</>
+                  ) : customTopic ? (
+                    <><Target className="mr-2 h-4 w-4" /> Request Spesifik</>
+                  ) : (
+                    <><Sparkles className="mr-2 h-4 w-4" /> Surprise Me</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- LIST KASUS YANG SUDAH ADA --- */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-4">
+             <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+             <p>Mengambil berkas pasien...</p>
+          </div>
+        ) : cases.length === 0 ? (
+          <div className="text-center py-24 bg-white rounded-xl border-2 border-dashed border-slate-200">
+            <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="h-8 w-8 text-slate-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-slate-900">Belum ada kasus</h3>
+            <p className="text-slate-500 mt-2 mb-6 max-w-sm mx-auto">
+              Klinik sedang sepi. Klik tombol <strong>"Terima Pasien Baru"</strong> di pojok kanan atas untuk mulai bermain.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {cases.map((game) => (
+              <Card 
+                key={game.id} 
+                className="hover:border-blue-400 hover:shadow-lg transition-all duration-300 cursor-pointer group relative overflow-hidden" 
+                onClick={() => router.push(`/play/${game.id}`)}
+              >
+                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <CardTitle className="text-lg leading-snug group-hover:text-blue-700 transition-colors">
+                      {game.title || "Kasus Tanpa Nama"}
+                    </CardTitle>
+                  </div>
+                  <CardDescription className="flex items-center gap-2 mt-2">
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium border ${
+                      game.difficulty === 'Hard' ? 'bg-red-50 text-red-600 border-red-200' : 
+                      game.difficulty === 'Medium' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : 
+                      'bg-green-50 text-green-600 border-green-200'
+                    }`}>
+                      {game.difficulty || "Normal"}
+                    </span>
+                    <span className="text-xs text-slate-400">• {new Date(game.created_at).toLocaleDateString('id-ID')}</span>
+                  </CardDescription>
+                </CardHeader>
+                
+                <CardFooter className="pt-0">
+                  <Link href={`/play/${game.id}`} className="w-full">
+                    <Button variant="secondary" className="w-full bg-slate-100 hover:bg-blue-600 hover:text-white transition-colors">
+                      <Play className="mr-2 h-4 w-4" /> Mulai Diagnosa
+                    </Button>
+                  </Link>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}'use client';
+
+import { useEffect, useState } from 'react';
+// ✅ Import Correct: Mundur 2 langkah ke root utils
+import { createClient } from '@/utils/supabase/client'; 
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Plus, Play, Loader2, Sparkles, Target, X, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
+
+export default function LobbyPage() {
+  // --- STATE ---
+  const [cases, setCases] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  
+  // State untuk Popup (Modal) Request Kasus
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [customTopic, setCustomTopic] = useState("");
+  const [selectedDifficulty, setSelectedDifficulty] = useState("random");
+
+  const supabase = createClient();
+  const router = useRouter();
+
+  // --- EFFECT ---
+  useEffect(() => {
+    fetchCases();
+  }, []);
+
+  // --- FUNCTIONS ---
+  async function fetchCases() {
+    const { data, error } = await supabase
+      .from('disease_cards')
+      .select('id, title, difficulty, created_at')
+      .order('created_at', { ascending: false });
+
+    if (!error) setCases(data || []);
+    setLoading(false);
+  }
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    // Jangan tutup modal dulu biar user tau loading
+    
+    const toastId = toast.loading("Sedang menghubungi AI Dokter...");
+
+    try {
+      // Kirim request ke API
+      const res = await fetch('/api/generate', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          topic: customTopic, 
+          difficulty: selectedDifficulty 
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        toast.dismiss(toastId);
+        toast.success("Pasien baru siap diperiksa!");
+        
+        setIsModalOpen(false); // Tutup modal
+        fetchCases(); // Refresh list
+        
+        // Langsung arahkan user ke halaman main
+        router.push(`/play/${data.id}`);
+        
+        // Reset form modal
+        setCustomTopic("");
+        setSelectedDifficulty("random");
+      } else {
+        throw new Error(data.error || "Gagal membuat kasus");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.dismiss(toastId);
+      toast.error("Gagal membuat kasus. Coba lagi nanti.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // --- RENDER ---
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+      <div className="max-w-5xl mx-auto space-y-8">
+        
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Lobby Praktek</h1>
+            <p className="text-slate-500">Pilih pasien untuk memulai diagnosa hari ini.</p>
+          </div>
+          
+          {/* Tombol Buka Modal */}
+          <Button 
+            onClick={() => setIsModalOpen(true)} 
+            size="lg" 
+            className="bg-blue-600 hover:bg-blue-700 shadow-md transition-all"
+          >
+            <Plus className="mr-2 h-5 w-5" /> Terima Pasien Baru
+          </Button>
+        </div>
+
+        {/* --- MODAL POPUP (REQUEST KASUS) --- */}
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
+              
+              {/* Header Modal */}
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="font-bold text-lg text-slate-800">Buat Skenario Pasien</h3>
+                <button 
+                  onClick={() => !generating && setIsModalOpen(false)} 
+                  className="text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                  disabled={generating}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Body Modal */}
+              <div className="p-6 space-y-5">
+                {/* Input Topik */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Keluhan / Penyakit (Opsional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Contoh: Demam Berdarah, Jantung..."
+                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm transition-all"
+                    value={customTopic}
+                    onChange={(e) => setCustomTopic(e.target.value)}
+                    disabled={generating}
+                  />
+                  <p className="text-xs text-slate-400">Biarkan kosong jika ingin penyakit acak.</p>
+                </div>
+
+                {/* Input Difficulty */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Tingkat Kesulitan</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['random', 'Easy', 'Medium', 'Hard'].map((diff) => (
+                      <button
+                        key={diff}
+                        onClick={() => setSelectedDifficulty(diff)}
+                        disabled={generating}
+                        className={`text-sm py-2 px-1 rounded-lg border transition-all ${
+                          selectedDifficulty === diff 
+                            ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold ring-1 ring-blue-500' 
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                      >
+                        {diff === 'random' ? 'Acak' : diff}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Modal */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <Button variant="ghost" onClick={() => setIsModalOpen(false)} disabled={generating}>
+                  Batal
+                </Button>
+                <Button 
+                  onClick={handleGenerate} 
+                  disabled={generating} 
+                  className="bg-slate-900 text-white hover:bg-slate-800 min-w-[140px]"
+                >
+                  {generating ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Meracik...</>
+                  ) : customTopic ? (
+                    <><Target className="mr-2 h-4 w-4" /> Request Spesifik</>
+                  ) : (
+                    <><Sparkles className="mr-2 h-4 w-4" /> Surprise Me</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- LIST KASUS YANG SUDAH ADA --- */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-4">
+             <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+             <p>Mengambil berkas pasien...</p>
+          </div>
+        ) : cases.length === 0 ? (
+          <div className="text-center py-24 bg-white rounded-xl border-2 border-dashed border-slate-200">
+            <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="h-8 w-8 text-slate-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-slate-900">Belum ada kasus</h3>
+            <p className="text-slate-500 mt-2 mb-6 max-w-sm mx-auto">
+              Klinik sedang sepi. Klik tombol <strong>"Terima Pasien Baru"</strong> di pojok kanan atas untuk mulai bermain.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {cases.map((game) => (
+              <Card 
+                key={game.id} 
+                className="hover:border-blue-400 hover:shadow-lg transition-all duration-300 cursor-pointer group relative overflow-hidden" 
+                onClick={() => router.push(`/play/${game.id}`)}
+              >
+                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <CardTitle className="text-lg leading-snug group-hover:text-blue-700 transition-colors line-clamp-2">
+                      {game.title || "Kasus Tanpa Nama"}
+                    </CardTitle>
+                  </div>
+                  <CardDescription className="flex items-center gap-2 mt-2">
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium border ${
+                      game.difficulty === 'Hard' ? 'bg-red-50 text-red-600 border-red-200' : 
+                      game.difficulty === 'Medium' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : 
+                      'bg-green-50 text-green-600 border-green-200'
+                    }`}>
+                      {game.difficulty || "Normal"}
+                    </span>
+                    <span className="text-xs text-slate-400">• {new Date(game.created_at).toLocaleDateString('id-ID')}</span>
+                  </CardDescription>
+                </CardHeader>
+                
+                <CardFooter className="pt-0">
+                  <Button variant="secondary" className="w-full bg-slate-100 hover:bg-blue-600 hover:text-white transition-colors">
+                    <Play className="mr-2 h-4 w-4" /> Mulai Diagnosa
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}'use client';
+
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Trash2, Edit, Plus, PlayCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import Link from 'next/link'; // Import Link buat tombol Play
+
+export default function AdminDashboard() {
+  const [cards, setCards] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // State untuk Generate Baru
+  const [topic, setTopic] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [openDialog, setOpenDialog] = useState(false);
+
+  // 1. Ambil data saat halaman dibuka
+  useEffect(() => {
+    fetchCards();
+  }, []);
+
+  async function fetchCards() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('disease_cards')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) toast.error('Gagal ambil data');
+    else setCards(data || []);
+    setLoading(false);
+  }
+
+  // 2. Fungsi Hapus Kartu
+  async function handleDelete(id: string) {
+    if (!confirm('Yakin mau hapus kartu ini?')) return;
+    
+    const { error } = await supabase.from('disease_cards').delete().eq('id', id);
+    if (error) {
+      toast.error('Gagal menghapus');
+    } else {
+      toast.success('Kartu dihapus');
+      fetchCards(); // Refresh list
+    }
+  }
+
+  // 3. Fungsi Generate Baru
+  async function handleGenerate() {
+    if (!topic) return;
+    setIsGenerating(true);
+    toast.info("AI sedang bekerja...");
+
+    try {
+      const res = await fetch('/api/generate-card', {
+        method: 'POST',
+        body: JSON.stringify({ topic }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      toast.success("Kartu baru jadi!");
+      setOpenDialog(false); // Tutup popup
+      setTopic('');         // Reset input
+      fetchCards();         // Refresh list otomatis
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto p-6 space-y-8">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
+          <p className="text-slate-500">Kelola database penyakit dan skenario game.</p>
+        </div>
+
+        {/* Tombol + Popup Generate Baru */}
+        <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus size={16} /> Generate Kasus Baru
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Minta AI Buat Kasus</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Topik / Nama Penyakit</label>
+                <Input 
+                  placeholder="Misal: Gagal Jantung Kongestif" 
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                />
+              </div>
+              <Button onClick={handleGenerate} disabled={isGenerating} className="w-full">
+                {isGenerating ? 'Sedang Berpikir...' : 'Generate Sekarang'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Grid Daftar Kartu */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {loading ? (
+          <p>Loading data...</p>
+        ) : cards.length === 0 ? (
+          <p className="text-slate-500 col-span-3 text-center py-10">Belum ada kartu. Klik Generate dulu!</p>
+        ) : (
+          cards.map((card) => (
+            <Card key={card.id} className="group hover:border-slate-400 transition-all">
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <Badge variant={card.status === 'published' ? 'default' : 'secondary'}>
+                    {card.status}
+                  </Badge>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleDelete(card.id)}>
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </div>
+                <CardTitle className="text-lg leading-tight mt-2">{card.title}</CardTitle>
+                <CardDescription>{card.category} • {card.difficulty}</CardDescription>
+              </CardHeader>
+              
+              <CardContent>
+                <div className="text-xs text-slate-500 line-clamp-3 mb-4 bg-slate-50 p-2 rounded">
+                  {card.content?.simulation?.chief_complaint_pool?.[0] || "No preview"}...
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="w-full text-xs" disabled>
+                    <Edit size={12} className="mr-2" /> Edit (Soon)
+                  </Button>
+                  
+                  {/* Tombol Play yang sudah diperbaiki */}
+                  <Link href={`/play/${card.id}`}>
+                    <Button size="icon" variant="secondary" className="shrink-0">
+                      <PlayCircle size={16} />
+                    </Button>
+                  </Link>
+
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
