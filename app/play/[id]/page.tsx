@@ -3,11 +3,11 @@
 import { useEffect, useState, use } from 'react';
 import { createClient } from '@/utils/supabase/client'; 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
-  Activity, Thermometer, TestTube, MessageCircle, HeartPulse, 
-  Stethoscope, BookOpen, AlertCircle, CheckCircle, User, Stethoscope as DocIcon 
+  Activity, TestTube, MessageCircle, HeartPulse, 
+  Stethoscope, BookOpen, AlertCircle, CheckCircle, User 
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -158,7 +158,6 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
     }
   };
 
-  // --- LOADING UI ---
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-4 h-screen flex flex-col justify-center items-center gap-4 bg-slate-50">
@@ -175,18 +174,16 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
   const wiki = card.content.wiki;
 
   return (
-    // Background Grid Pattern biar keren
-    <div className="min-h-screen bg-slate-50 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] font-sans text-slate-900 pb-10">
+    <div className="min-h-screen bg-slate-50 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] font-sans text-slate-900 pb-20">
       
-      {/* HEADER SIMPLE */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10 px-6 py-3 flex justify-between items-center shadow-sm">
+      {/* HEADER */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 md:px-6 py-3 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
-           <div className="bg-blue-600 text-white p-1.5 rounded-lg">
-             <Activity size={18} />
+           <div className="bg-blue-600 text-white p-2 rounded-lg">
+             <Activity size={20} />
            </div>
            <div>
-             <h1 className="text-sm font-bold text-slate-800 leading-none">MED-SIM <span className="text-blue-600">PRO</span></h1>
-             <p className="text-[10px] text-slate-400 font-mono">ROOM ID: {id.slice(0,6).toUpperCase()}</p>
+             <h1 className="text-sm md:text-base font-bold text-slate-800 leading-none">MED-SIM <span className="text-blue-600">PRO</span></h1>
            </div>
         </div>
         <div className="flex items-center gap-2">
@@ -194,68 +191,70 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${gameState === 'playing' ? 'bg-green-400' : 'bg-red-400'}`}></span>
               <span className={`relative inline-flex rounded-full h-3 w-3 ${gameState === 'playing' ? 'bg-green-500' : 'bg-red-500'}`}></span>
             </span>
-            <span className="text-xs font-bold text-slate-600 uppercase">
-              {gameState === 'playing' ? 'LIVE SESSION' : gameState === 'won' ? 'CASE CLOSED' : 'CRITICAL'}
+            <span className="text-xs md:text-sm font-bold text-slate-600 uppercase">
+              {gameState === 'playing' ? 'LIVE' : gameState === 'won' ? 'CLOSED' : 'CRITICAL'}
             </span>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto p-4 flex flex-col md:flex-row gap-6 mt-2">
+      {/* LAYOUT FIX: 
+         - Menggunakan 'lg:flex-row' bukan 'md:flex-row'. 
+         - Tablet (md) sekarang akan tetap 'flex-col' (atas-bawah) agar tidak sempit.
+         - Laptop (lg) baru berubah jadi kiri-kanan.
+      */}
+      <div className="max-w-7xl mx-auto p-4 flex flex-col lg:flex-row gap-6 mt-2">
         
-        {/* --- KIRI: UTAMA --- */}
-        <div className="flex-1 flex flex-col gap-6">
+        {/* --- AREA UTAMA (Energi & Chat) --- */}
+        <div className="flex-1 flex flex-col gap-4 md:gap-6">
           
-          {/* ENERGY BAR MEWAH */}
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4 relative overflow-hidden">
-             {/* Background Pulse Effect */}
+          {/* ENERGY BAR */}
+          <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4 relative overflow-hidden">
              <div className={`absolute left-0 top-0 bottom-0 bg-blue-50 transition-all duration-700`} style={{ width: `${energy}%`, opacity: 0.3 }} />
              
              <div className={`relative z-10 p-3 rounded-xl shadow-lg transition-colors duration-500 ${energy < 30 ? 'bg-red-500 shadow-red-200' : 'bg-blue-600 shadow-blue-200'}`}>
-                <HeartPulse size={28} className="text-white animate-pulse" />
+                <HeartPulse size={24} className="text-white animate-pulse" />
              </div>
              <div className="flex-1 relative z-10">
                 <div className="flex justify-between items-end mb-2">
-                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Stamina Dokter</p>
-                   <p className="text-2xl font-black text-slate-800">{energy}<span className="text-sm font-medium text-slate-400 ml-1">AP</span></p>
+                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Stamina</p>
+                   <p className="text-xl md:text-2xl font-black text-slate-800">{energy}<span className="text-sm font-medium text-slate-400 ml-1">AP</span></p>
                 </div>
-                <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
                    <div 
-                     className={`h-full rounded-full transition-all duration-700 ease-out shadow-[0_0_10px_rgba(0,0,0,0.1)] ${energy < 30 ? 'bg-red-500' : energy < 60 ? 'bg-amber-400' : 'bg-blue-500'}`} 
+                     className={`h-full rounded-full transition-all duration-700 ease-out ${energy < 30 ? 'bg-red-500' : energy < 60 ? 'bg-amber-400' : 'bg-blue-500'}`} 
                      style={{ width: `${energy}%` }}
                    />
                 </div>
              </div>
           </div>
 
-          {/* CHAT / LOG AREA */}
-          <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[400px]">
+          {/* CHAT AREA - Height disesuaikan agar di tablet tetap tinggi */}
+          <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[500px] lg:h-auto">
             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-              <User size={16} className="text-slate-400"/>
-              <span className="text-sm font-bold text-slate-700">Rekam Medis: <span className="text-blue-600">{card.title}</span></span>
+              <User size={18} className="text-slate-400"/>
+              <span className="text-sm md:text-base font-bold text-slate-700">Pasien: <span className="text-blue-600">{card.title}</span></span>
             </div>
             
-            <div id="chat-container" className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/30">
+            <div id="chat-container" className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-slate-50/30">
                {logs.map((log, i) => (
                  <div key={i} className={`flex flex-col ${log.sender === 'Dokter' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
                     
-                    {/* LABEL PENGIRIM */}
                     {log.sender !== 'System' && (
-                      <span className={`text-[10px] font-bold mb-1 px-2 ${log.sender === 'Dokter' ? 'text-blue-500' : 'text-slate-400'}`}>
+                      <span className={`text-xs font-bold mb-1 px-2 ${log.sender === 'Dokter' ? 'text-blue-500' : 'text-slate-400'}`}>
                         {log.sender === 'Dokter' ? 'Dr. Kamu' : log.sender}
                       </span>
                     )}
 
-                    {/* BUBBLE CHAT */}
-                    <div className={`px-5 py-3 text-sm shadow-sm max-w-[85%] leading-relaxed ${
+                    <div className={`px-4 md:px-5 py-3 text-sm md:text-base shadow-sm max-w-[90%] md:max-w-[85%] leading-relaxed ${
                       log.sender === 'Dokter' 
-                        ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white rounded-2xl rounded-tr-sm' 
+                        ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm' 
                         : log.sender === 'System' 
-                          ? 'w-full max-w-full text-center bg-slate-200/50 text-slate-600 rounded-lg text-xs font-mono py-1.5 border border-slate-200 mx-auto' 
+                          ? 'w-full max-w-full text-center bg-slate-200/50 text-slate-600 rounded-lg text-xs font-mono py-2 border border-slate-200 mx-auto' 
                           : log.type === 'alert'
                             ? 'bg-red-50 text-red-800 border border-red-200 rounded-xl'
                             : log.type === 'success'
                               ? 'bg-green-50 text-green-800 border border-green-200 rounded-xl font-bold text-center w-full'
-                              : 'bg-white text-slate-700 border border-slate-100 rounded-2xl rounded-tl-sm'
+                              : 'bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-tl-sm'
                     }`}>
                       {log.text}
                     </div>
@@ -264,9 +263,9 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
             </div>
           </div>
 
-          {/* LAPORAN AKHIR (MUNCUL SAAT GAME SELESAI) */}
+          {/* HASIL / RESULT CARD */}
           {gameState !== 'playing' && (
-            <div className="bg-white rounded-2xl shadow-xl border-t-4 border-t-blue-500 overflow-hidden animate-in zoom-in-95 duration-500">
+            <div className="bg-white rounded-2xl shadow-xl border-t-4 border-t-blue-500 overflow-hidden animate-in zoom-in-95 duration-500 mb-6">
                <div className="p-6 bg-blue-50/30 border-b border-slate-100">
                   <h2 className="flex items-center gap-2 text-xl font-bold text-slate-800">
                     <BookOpen className="text-blue-600" /> Analisis Kasus
@@ -276,32 +275,26 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase mb-2">Diagnosa Akhir</p>
                     <p className="text-2xl font-black text-blue-600 mb-4">{sim.diagnosis_answer}</p>
-                    <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <p className="text-sm md:text-base text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
                       {wiki.definition}
                     </p>
                   </div>
                   <div className="space-y-4">
                      <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><AlertCircle size={12}/> Gejala Kunci</p>
-                        <ul className="text-sm text-slate-700 space-y-1">
+                        <p className="text-xs font-bold text-slate-400 uppercase mb-2">Gejala Kunci</p>
+                        <ul className="text-sm md:text-base text-slate-700 space-y-1">
                           {wiki.clinical_signs?.map((s: string, i: number) => (
                             <li key={i} className="flex items-start gap-2">
-                              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0"></span>
+                              <span className="mt-2 h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0"></span>
                               {s}
                             </li>
                           ))}
                         </ul>
                      </div>
-                     <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><CheckCircle size={12}/> Tatalaksana</p>
-                        <div className="text-sm text-green-800 bg-green-50 p-3 rounded-lg border border-green-100 font-medium">
-                          {wiki.treatment_guideline}
-                        </div>
-                     </div>
                   </div>
                </div>
                <div className="p-4 bg-slate-50 flex justify-center">
-                  <Button size="lg" className="w-full md:w-auto px-8 font-bold shadow-lg shadow-blue-200" onClick={() => router.push('/')}>
+                  <Button size="lg" className="w-full md:w-auto px-8 font-bold shadow-lg shadow-blue-200 py-6 text-lg" onClick={() => router.push('/')}>
                     Simulasi Berikutnya 👉
                   </Button>
                </div>
@@ -310,22 +303,23 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
 
         </div>
 
-        {/* --- KANAN: ACTIONS --- */}
-        <div className="w-full md:w-[380px] flex flex-col gap-4 h-[calc(100vh-140px)] sticky top-24">
+        {/* --- AREA KANAN (Actions) --- */}
+        {/* Di Tablet (md), width akan 100% (full). Baru di Laptop (lg) jadi sidebar 380px */}
+        <div className="w-full lg:w-[380px] flex flex-col gap-4 shrink-0 pb-10">
            
-           {/* 1. WAWANCARA */}
+           {/* WAWANCARA */}
            <Card className={`border-none shadow-md overflow-hidden flex flex-col transition-all duration-300 ${gameState !== 'playing' && 'opacity-50 grayscale pointer-events-none'}`}>
-             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-3 flex justify-between items-center text-white">
-                <div className="flex items-center gap-2 font-bold text-sm"><MessageCircle size={16}/> Anamnesis</div>
-                <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full backdrop-blur-sm">-{COSTS.ASK} AP</span>
+             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-3 md:p-4 flex justify-between items-center text-white">
+                <div className="flex items-center gap-2 font-bold text-sm md:text-base"><MessageCircle size={18}/> Anamnesis</div>
+                <span className="text-xs bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm">-{COSTS.ASK} AP</span>
              </div>
-             <div className="p-3 bg-white flex-1 overflow-y-auto max-h-[250px] space-y-2">
+             <div className="p-3 bg-white flex-1 space-y-2 lg:max-h-[300px] overflow-y-auto">
                 {sim.interview_questions?.map((q: any, i: number) => (
                   <button 
                     key={i} 
                     onClick={() => handleAsk(i, q)}
                     disabled={askedQuestions.includes(i)}
-                    className={`w-full text-left text-xs p-3 rounded-xl border transition-all duration-200 ${
+                    className={`w-full text-left text-sm md:text-base p-3 md:p-4 rounded-xl border transition-all duration-200 ${
                       askedQuestions.includes(i) 
                       ? 'bg-slate-50 text-slate-400 border-slate-100 decoration-slate-300 line-through' 
                       : 'bg-white border-slate-200 hover:border-blue-400 hover:shadow-md hover:bg-blue-50/50 text-slate-700'
@@ -337,64 +331,60 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
              </div>
            </Card>
 
-           {/* 2. PERIKSA FISIK & LAB */}
-           <Card className={`border-none shadow-md overflow-hidden transition-all duration-300 ${gameState !== 'playing' && 'opacity-50 grayscale pointer-events-none'}`}>
-             <div className="bg-gradient-to-r from-purple-600 to-fuchsia-600 p-3 flex justify-between items-center text-white">
-                <div className="flex items-center gap-2 font-bold text-sm"><TestTube size={16}/> Pemeriksaan</div>
-                <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full backdrop-blur-sm">-{COSTS.LABS} AP</span>
-             </div>
-             <div className="p-4 bg-white">
-               {!dataRevealed.labs ? (
-                 <div className="text-center py-4">
-                   <TestTube size={48} className="mx-auto text-purple-100 mb-2"/>
-                   <Button onClick={() => revealData('labs')} className="w-full bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-200">
-                     Order Lab & Fisik
-                   </Button>
-                 </div>
-               ) : (
-                 <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
-                   <div className="flex items-center gap-2 text-xs font-bold text-purple-700 bg-purple-50 p-2 rounded-lg">
-                      <CheckCircle size={14}/> Hasil Keluar
+           {/* PEMERIKSAAN */}
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4">
+             {/* Tombol Lab/Fisik */}
+             <Card className={`border-none shadow-md overflow-hidden transition-all duration-300 ${gameState !== 'playing' && 'opacity-50 grayscale pointer-events-none'}`}>
+               <div className="bg-gradient-to-r from-purple-600 to-fuchsia-600 p-3 md:p-4 flex justify-between items-center text-white">
+                  <div className="flex items-center gap-2 font-bold text-sm md:text-base"><TestTube size={18}/> Lab & Fisik</div>
+                  <span className="text-xs bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm">-{COSTS.LABS} AP</span>
+               </div>
+               <div className="p-4 bg-white min-h-[120px] flex items-center justify-center">
+                 {!dataRevealed.labs ? (
+                   <div className="text-center w-full">
+                     <Button onClick={() => revealData('labs')} className="w-full bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-200 py-6 text-sm md:text-base">
+                       Order Lab & Fisik
+                     </Button>
                    </div>
-                   <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                 ) : (
+                   <div className="w-full space-y-2 animate-in fade-in">
                       {sim.lab_abnormalities?.length > 0 ? sim.lab_abnormalities.map((lab: any, i: number) => (
-                        <div key={i} className="flex justify-between items-center text-xs p-2 border-b border-slate-100">
+                        <div key={i} className="flex justify-between items-center text-sm md:text-base p-2 border-b border-slate-100">
                            <span className="font-bold text-slate-500">{lab.name}</span>
                            <span className="font-bold text-slate-800 text-right">{lab.value}</span>
                         </div>
-                      )) : <p className="text-xs text-slate-400 italic text-center">Tidak ada kelainan signifikan.</p>}
+                      )) : <p className="text-sm text-slate-400 italic text-center">Tidak ada kelainan signifikan.</p>}
                    </div>
-                 </div>
-               )}
-             </div>
-           </Card>
+                 )}
+               </div>
+             </Card>
 
-           {/* 3. DIAGNOSA */}
-           <Card className={`border-none shadow-md mt-auto flex flex-col overflow-hidden bg-slate-800 text-white transition-all duration-300 ${gameState !== 'playing' && 'opacity-50 grayscale pointer-events-none'}`}>
-              <div className="p-3 bg-slate-900 border-b border-slate-700 font-bold text-sm flex items-center gap-2">
-                 <Stethoscope size={16} className="text-green-400"/> Diagnosis Akhir
-              </div>
-              <div className="p-3 space-y-2 max-h-[250px] overflow-y-auto">
-                {sim.diagnosis_options?.map((option: string, i: number) => (
-                  <button 
-                    key={i} 
-                    onClick={() => handleGuess(option)}
-                    className="w-full text-left text-xs font-medium p-3 rounded-lg bg-slate-700 hover:bg-green-600 hover:text-white transition-all duration-200 border border-slate-600 hover:border-green-500"
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-           </Card>
-
+             {/* DIAGNOSA */}
+             <Card className={`border-none shadow-md flex flex-col overflow-hidden bg-slate-800 text-white transition-all duration-300 ${gameState !== 'playing' && 'opacity-50 grayscale pointer-events-none'}`}>
+                <div className="p-3 md:p-4 bg-slate-900 border-b border-slate-700 font-bold text-sm md:text-base flex items-center gap-2">
+                   <Stethoscope size={18} className="text-green-400"/> Diagnosis Akhir
+                </div>
+                <div className="p-3 space-y-2 max-h-[300px] overflow-y-auto">
+                  {sim.diagnosis_options?.map((option: string, i: number) => (
+                    <button 
+                      key={i} 
+                      onClick={() => handleGuess(option)}
+                      className="w-full text-left text-sm md:text-base font-medium p-3 md:p-4 rounded-lg bg-slate-700 hover:bg-green-600 hover:text-white transition-all duration-200 border border-slate-600 hover:border-green-500"
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+             </Card>
+           </div>
         </div>
       </div>
 
-      {/* --- WATERMARK FARREL (FLOATING BADGE) --- */}
+      {/* WATERMARK FIXED */}
       <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-         <div className="bg-white/80 backdrop-blur-md border border-slate-200 shadow-xl rounded-full px-4 py-1.5 flex items-center gap-2 transition-transform hover:scale-105 cursor-default">
+         <div className="bg-white/90 backdrop-blur-md border border-slate-200 shadow-xl rounded-full px-4 py-2 flex items-center gap-2 transition-transform hover:scale-105 cursor-default">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-[10px] font-bold text-slate-500 tracking-wide">
+            <span className="text-[10px] md:text-xs font-bold text-slate-500 tracking-wide">
               HOSPITAL OS v1.0 • <span className="text-blue-600">Dev by Farrel</span>
             </span>
          </div>
