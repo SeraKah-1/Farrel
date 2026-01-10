@@ -6,21 +6,20 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// --- DAFTAR SPESIALISASI UNTUK MODE ACAK ---
-// Ini adalah kunci agar soal tidak melulu soal jantung.
+// DAFTAR TOPIK AGAR TIDAK MELULU JANTUNG
 const RANDOM_TOPICS = [
-  "Neurologi (Saraf & Stroke)",
-  "Gastroenterohepatologi (Pencernaan & Hati)",
-  "Respirologi (Paru & Pernapasan)",
-  "Dermatologi & Venereologi (Kulit & Kelamin)",
+  "Neurologi (Saraf, Stroke, Vertigo)",
+  "Gastroenterohepatologi (Lambung, Usus, Hati)",
+  "Respirologi (Paru, Asma, Pneumonia, TBC)",
+  "Dermatologi (Penyakit Kulit, Infeksi, Alergi)",
   "Penyakit Tropis & Infeksi (Dengue, Malaria, Tifoid)",
-  "Endokrinologi & Metabolik (Diabetes, Tiroid)",
-  "Nefrologi & Urologi (Ginjal & Saluran Kemih)",
-  "Hematologi & Onkologi (Darah & Kanker)",
-  "Psikiatri (Kesehatan Jiwa)",
-  "Pediatri (Kesehatan Anak)",
-  "Traumatologi & Bedah Dasar",
-  "THT-KL (Telinga Hidung Tenggorok)"
+  "Endokrinologi (Diabetes, Tiroid)",
+  "Urologi (Ginjal, Saluran Kemih, Batu)",
+  "Hematologi (Anemia, Kelainan Darah)",
+  "Psikiatri (Kecemasan, Depresi, Skizofrenia)",
+  "Pediatri (Penyakit Anak Umum)",
+  "THT (Telinga, Hidung, Tenggorok)",
+  "Mata (Katarak, Konjungtivitis, Glaukoma)"
 ];
 
 export async function POST(request: Request) {
@@ -28,70 +27,101 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     let { topic, difficulty } = await request.json();
 
-    // --- LOGIKA RANDOMIZER (GACHA SYSTEM) ---
-    // Jika user tidak isi topik, atau pilih 'Acak', kita pilihkan secara paksa di sini.
+    // --- LOGIKA GACHA TOPIK ---
     let activeTopic = topic;
     const isRandomMode = !topic || topic.toLowerCase() === 'acak' || topic.toLowerCase() === 'random';
 
     if (isRandomMode) {
-      // Pilih 1 topik acak dari array di atas
       const randomIndex = Math.floor(Math.random() * RANDOM_TOPICS.length);
       activeTopic = RANDOM_TOPICS[randomIndex];
     }
-
-    // Default difficulty jika kosong
+    
     const activeDifficulty = difficulty || 'Medium';
 
-    // --- SYSTEM PROMPT (DIPERTAJAM UNTUK VARIASI) ---
     const systemPrompt = `
-      Anda adalah Senior Medical Educator. Tugas Anda membuat kasus simulasi klinis yang VARIATIF dan TIDAK TEMPLATE.
+      Anda adalah Senior Medical Educator. Tugas Anda membuat simulasi kasus klinis yang REALISTIS.
       
-      INSTRUKSI KHUSUS UNTUK KASUS INI:
-      - Topik Spesifik: ${activeTopic} ${isRandomMode ? '(JANGAN buat kasus Jantung/Chest Pain kecuali topiknya eksplisit Kardiologi)' : ''}
-      - Tingkat Kesulitan: ${activeDifficulty}
+      KONTEKS:
+      - Topik: ${activeTopic} ${isRandomMode ? '(JANGAN buat kasus Nyeri Dada/Jantung kecuali topik eksplisit Kardiologi)' : ''}
+      - Kesulitan: ${activeDifficulty}
       
-      Format Output WAJIB JSON (tanpa markdown):
+      OUTPUT HARUS JSON (Tanpa markdown) DENGAN STRUKTUR INI:
       {
-        "title": "Nama Diagnosis Medis (Singkat & Padat)",
-        "difficulty": "${activeDifficulty}",
-        "scenario": {
-          "patient": {
-            "history": "Narasi keluhan utama (Chief Complaint) + Riwayat Penyakit Sekarang (RPS). Buat pasien bervariasi (Usia muda/tua, Pria/Wanita)."
-          },
-          "symptoms": ["Gejala 1", "Gejala 2", "Gejala 3", "Gejala 4"],
-          "physical_check": ["Tanda Vital (Tensi, Nadi, RR, Suhu)", "Temuan Fisik Khas (Head-to-toe)"],
-          "lab_results": ["Hasil Lab/Radiologi yang abnormal & relevan saja"],
-          
-          "dialogues": [
-            { "question": "Tanya soal keluhan utama & durasi", "answer": "Jawaban pasien yang natural" },
-            { "question": "Tanya gejala penyerta", "answer": "Jawaban pasien" },
-            { "question": "Tanya riwayat penyakit dahulu/keluarga", "answer": "Jawaban pasien" },
-            { "question": "Tanya kebiasaan/faktor risiko", "answer": "Jawaban pasien" }
-          ],
-
-          "explanation": "Tuliskan PATOFISIOLOGI lengkap dan definisi penyakit ini secara ilmiah (Medical Textbook Style). Jelaskan mekanisme kenapa gejala itu muncul. Minimal 2-3 kalimat panjang.",
-          
-          "treatment": [
-            "Langkah 1 (Tindakan Awal/Stabilisasi)",
-            "Langkah 2 (Farmakologi: Nama Obat & Golongan)",
-            "Langkah 3 (Pemeriksaan Penunjang Lanjutan/Rujuk)"
-          ],
-
-          "options": ["Diagnosis Benar", "Diagnosis Banding 1", "Diagnosis Banding 2", "Diagnosis Salah"]
+        "title": "Nama Diagnosis Medis (Contoh: Demam Tifoid)",
+        "patient": {
+           "name": "Nama Indonesia (Contoh: Bpk. Budi / Ibu Siti)",
+           "age": "Angka Usia",
+           "job": "Pekerjaan (Relevan dengan penyakit/sosial)",
+           "chief_complaint": "Keluhan Utama (Singkat)",
+           "history_now": "Narasi RPS lengkap 2-3 kalimat."
         },
-        "correct_diagnosis": "Diagnosis Benar (Sama dengan title)"
+        "anamnesis": [
+           // WAJIB ADA 6 PERTANYAAN:
+           // 3 Pertanyaan Relevan (Kunci Diagnosis)
+           // 2 Pertanyaan Noise/Sampah (Basa-basi/Tidak relevan)
+           // 1 Pertanyaan Red Herring (Pengecoh/Menjebak ke diagnosis lain)
+           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "relevant" },
+           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "relevant" },
+           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "relevant" },
+           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "noise" },
+           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "noise" },
+           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "trap" }
+        ],
+        "examinations": {
+           "physical": {
+              "vitals": { 
+                 "bp": "120/80 mmHg (sesuaikan)", 
+                 "hr": "80 bpm (sesuaikan)", 
+                 "temp": "36.5 C (sesuaikan)", 
+                 "rr": "20 x/m", 
+                 "spo2": "98%" 
+              },
+              "observations": [
+                 "Array string temuan fisik (Inspeksi/Palpasi/Auskultasi).",
+                 "Contoh: Konjungtiva anemis",
+                 "Contoh: Ronkhi basah kasar di paru kanan"
+              ]
+           },
+           "labs": [
+              // Array object hasil penunjang (Lab Darah/Rontgen/EKG)
+              // Campur antara yg Abnormal (Kunci) dan Normal (Pengecoh)
+              { "name": "Hemoglobin", "result": "10 g/dL (Rendah)" },
+              { "name": "Leukosit", "result": "15.000 /uL (Tinggi)" },
+              { "name": "GDS", "result": "110 mg/dL (Normal)" }
+           ]
+        },
+        "diagnosis": {
+           "correct_answer": "Diagnosis Benar (Sama dengan title)",
+           "options": [
+              "Diagnosis Benar",
+              "Diagnosis Banding 1 (Gejala mirip)",
+              "Diagnosis Banding 2 (Gejala mirip)",
+              "Diagnosis Pengecoh (Agak beda)"
+           ]
+        },
+        "wiki": {
+           "definition": "Penjelasan medis penyakit ini.",
+           "pathophysiology": "Mekanisme penyakit secara ilmiah (Medical Textbook style).",
+           "clinical_signs": ["Tanda khas 1", "Tanda khas 2"],
+           "treatment": [
+              "Tatalaksana 1 (Non-farmako)",
+              "Tatalaksana 2 (Obat spesifik & Dosis)",
+              "Tatalaksana 3 (Rujuk/Tindakan)"
+           ]
+        }
       }
     `;
 
     const completion = await openai.chat.completions.create({
       messages: [{ role: "system", content: systemPrompt }],
-      model: "gpt-4o-mini", 
-      temperature: 0.85, // Temperatur tinggi = Lebih Kreatif/Acak
+      model: "gpt-4o-mini",
+      temperature: 0.85, // Kreativitas tinggi
       response_format: { type: "json_object" }
     });
 
     const content = completion.choices[0].message.content;
     if (!content) throw new Error("Gagal generate konten AI");
+    
     const gameData = JSON.parse(content);
 
     // Simpan ke database
@@ -99,10 +129,10 @@ export async function POST(request: Request) {
       .from('disease_cards')
       .insert([{
           title: gameData.title,
-          difficulty: gameData.difficulty,
-          correct_diagnosis: gameData.correct_diagnosis,
-          scenario: gameData.scenario,
-          content: gameData
+          difficulty: activeDifficulty,
+          correct_diagnosis: gameData.diagnosis.correct_answer,
+          scenario: gameData, // Simpan JSON structure baru langsung ke scenario
+          content: gameData   // Backup
       }])
       .select()
       .single();
