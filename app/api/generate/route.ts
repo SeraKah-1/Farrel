@@ -1,111 +1,109 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import OpenAI from 'openai'; 
+import OpenAI from 'openai';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// --- DAFTAR TOPIK AGAR TIDAK MELULU JANTUNG ---
-const MEDICAL_TOPICS = [
-  "Neurology (Saraf - e.g., Stroke, Meningitis, Vertigo)",
-  "Gastroenterology (Pencernaan - e.g., GERD, Hepatitis, Appendicitis)",
-  "Dermatology (Kulit - e.g., Herpes Zoster, Psoriasis, Steven-Johnson)",
-  "Respirology (Paru - e.g., Pneumonia, TB, Asthma, COPD)",
-  "Infectious Disease (Infeksi Tropis - e.g., Dengue, Malaria, Typhoid)",
-  "Endocrinology (Hormon - e.g., Diabetes Ketoacidosis, Thyroid Storm)",
-  "Hematology (Darah - e.g., Anemia, Leukemia, DVT)",
-  "Nephrology (Ginjal - e.g., Gagal Ginjal Akut, Batu Saluran Kemih)",
-  "Rheumatology (Autoimun - e.g., Lupus, Gout, Arthritis)",
-  "Emergency Trauma (Kecelakaan - e.g., Pneumothorax, Fraktur)",
-  "Pediatrics (Anak - e.g., Kejang Demam, Campak)",
-  "Psychiatry (Jiwa - e.g., Skizofrenia, Bipolar, Panic Attack)"
+// --- DAFTAR SPESIALISASI UNTUK MODE ACAK ---
+// Ini adalah kunci agar soal tidak melulu soal jantung.
+const RANDOM_TOPICS = [
+  "Neurologi (Saraf & Stroke)",
+  "Gastroenterohepatologi (Pencernaan & Hati)",
+  "Respirologi (Paru & Pernapasan)",
+  "Dermatologi & Venereologi (Kulit & Kelamin)",
+  "Penyakit Tropis & Infeksi (Dengue, Malaria, Tifoid)",
+  "Endokrinologi & Metabolik (Diabetes, Tiroid)",
+  "Nefrologi & Urologi (Ginjal & Saluran Kemih)",
+  "Hematologi & Onkologi (Darah & Kanker)",
+  "Psikiatri (Kesehatan Jiwa)",
+  "Pediatri (Kesehatan Anak)",
+  "Traumatologi & Bedah Dasar",
+  "THT-KL (Telinga Hidung Tenggorok)"
 ];
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { topic, difficulty } = await request.json(); 
+    let { topic, difficulty } = await request.json();
 
-    // LOGIKA RANDOMIZER:
-    // Jika user tidak minta topik spesifik, kita pilih acak dari daftar di atas.
-    const selectedTopic = topic && topic !== 'Random' 
-      ? topic 
-      : MEDICAL_TOPICS[Math.floor(Math.random() * MEDICAL_TOPICS.length)];
+    // --- LOGIKA RANDOMIZER (GACHA SYSTEM) ---
+    // Jika user tidak isi topik, atau pilih 'Acak', kita pilihkan secara paksa di sini.
+    let activeTopic = topic;
+    const isRandomMode = !topic || topic.toLowerCase() === 'acak' || topic.toLowerCase() === 'random';
 
-    const selectedDifficulty = difficulty || 'Medium';
+    if (isRandomMode) {
+      // Pilih 1 topik acak dari array di atas
+      const randomIndex = Math.floor(Math.random() * RANDOM_TOPICS.length);
+      activeTopic = RANDOM_TOPICS[randomIndex];
+    }
 
+    // Default difficulty jika kosong
+    const activeDifficulty = difficulty || 'Medium';
+
+    // --- SYSTEM PROMPT (DIPERTAJAM UNTUK VARIASI) ---
     const systemPrompt = `
-      Anda adalah Profesor Kedokteran Senior. Tugas Anda adalah membuat simulasi kasus klinis yang UNIK dan MENANTANG.
+      Anda adalah Senior Medical Educator. Tugas Anda membuat kasus simulasi klinis yang VARIATIF dan TIDAK TEMPLATE.
       
-      TARGET GENERASI:
-      - Topik Spesifik: ${selectedTopic}
-      - Tingkat Kesulitan: ${selectedDifficulty}
-      - HINDARI KLISE: Jangan membuat kasus "Nyeri Dada/Jantung" kecuali topiknya spesifik Cardiology. Cobalah variasi pasien (muda/tua/perempuan/laki-laki).
-
-      OUTPUT JSON FORMAT (Strict JSON, No Markdown):
+      INSTRUKSI KHUSUS UNTUK KASUS INI:
+      - Topik Spesifik: ${activeTopic} ${isRandomMode ? '(JANGAN buat kasus Jantung/Chest Pain kecuali topiknya eksplisit Kardiologi)' : ''}
+      - Tingkat Kesulitan: ${activeDifficulty}
+      
+      Format Output WAJIB JSON (tanpa markdown):
       {
-        "title": "Diagnosis Medis (Nama Penyakit)",
-        "difficulty": "${selectedDifficulty}",
+        "title": "Nama Diagnosis Medis (Singkat & Padat)",
+        "difficulty": "${activeDifficulty}",
         "scenario": {
           "patient": {
-            "history": "Narasi keluhan utama (Chief Complaint) yang detail. Sertakan usia, gender, pekerjaan, dan onset gejala."
+            "history": "Narasi keluhan utama (Chief Complaint) + Riwayat Penyakit Sekarang (RPS). Buat pasien bervariasi (Usia muda/tua, Pria/Wanita)."
           },
-          "symptoms": ["Gejala 1", "Gejala 2", "Gejala 3 (yang agak mengecoh)"],
-          "physical_check": [
-            "Tanda Vital: Tensi, Nadi, Suhu, RR (buat realistis sesuai penyakit)",
-            "Kepala/Leher: ...",
-            "Thorax/Abdomen: ...",
-            "Ekstremitas: ..."
-          ],
-          "lab_results": [
-             "Darah Lengkap: ...",
-             "Kimia Darah/Urinalisa: ...",
-             "Pemeriksaan Penunjang Kunci (Rontgen/CT/EKG): ..."
-          ],
+          "symptoms": ["Gejala 1", "Gejala 2", "Gejala 3", "Gejala 4"],
+          "physical_check": ["Tanda Vital (Tensi, Nadi, RR, Suhu)", "Temuan Fisik Khas (Head-to-toe)"],
+          "lab_results": ["Hasil Lab/Radiologi yang abnormal & relevan saja"],
+          
           "dialogues": [
-            { "question": "Dokter: [Tanya Riwayat Penyakit Sekarang]", "answer": "Pasien: [Jawaban keluhan]" },
-            { "question": "Dokter: [Tanya Faktor Risiko/Kebiasaan]", "answer": "Pasien: [Jawaban relevan]" },
-            { "question": "Dokter: [Tanya Riwayat Keluarga/Alergi]", "answer": "Pasien: [Jawaban]" },
-            { "question": "Dokter: [Pertanyaan Jebakan/Kurang Relevan]", "answer": "Pasien: [Jawaban tidak tahu/ragu]" }
+            { "question": "Tanya soal keluhan utama & durasi", "answer": "Jawaban pasien yang natural" },
+            { "question": "Tanya gejala penyerta", "answer": "Jawaban pasien" },
+            { "question": "Tanya riwayat penyakit dahulu/keluarga", "answer": "Jawaban pasien" },
+            { "question": "Tanya kebiasaan/faktor risiko", "answer": "Jawaban pasien" }
           ],
-          "explanation": "PENJELASAN MENDALAM (Patofisiologi): Jelaskan mekanisme penyakit ini dari tingkat selular/organ. Kenapa gejalanya muncul? Apa etiologinya? (Min. 3 kalimat panjang).",
+
+          "explanation": "Tuliskan PATOFISIOLOGI lengkap dan definisi penyakit ini secara ilmiah (Medical Textbook Style). Jelaskan mekanisme kenapa gejala itu muncul. Minimal 2-3 kalimat panjang.",
+          
           "treatment": [
-            "Tatalaksana Awal (Stabilisasi/IGD)",
-            "Farmakoterapi Spesifik (Nama Obat + Golongan)",
-            "Tindakan Non-Farmakologis / Operatif",
-            "Edukasi Pasien / Rencana Pulang"
+            "Langkah 1 (Tindakan Awal/Stabilisasi)",
+            "Langkah 2 (Farmakologi: Nama Obat & Golongan)",
+            "Langkah 3 (Pemeriksaan Penunjang Lanjutan/Rujuk)"
           ],
-          "options": ["Diagnosa Benar", "Diagnosa Banding 1", "Diagnosa Banding 2", "Diagnosa Salah"]
+
+          "options": ["Diagnosis Benar", "Diagnosis Banding 1", "Diagnosis Banding 2", "Diagnosis Salah"]
         },
-        "correct_diagnosis": "Diagnosa Benar (Sama dengan title)"
+        "correct_diagnosis": "Diagnosis Benar (Sama dengan title)"
       }
     `;
 
     const completion = await openai.chat.completions.create({
       messages: [{ role: "system", content: systemPrompt }],
-      model: "gpt-4o-mini", // Model cepat & pintar
-      temperature: 0.85, // AGAK TINGGI supaya hasilnya lebih kreatif/variatif
+      model: "gpt-4o-mini", 
+      temperature: 0.85, // Temperatur tinggi = Lebih Kreatif/Acak
       response_format: { type: "json_object" }
     });
 
     const content = completion.choices[0].message.content;
     if (!content) throw new Error("Gagal generate konten AI");
-
     const gameData = JSON.parse(content);
 
-    // Simpan ke Supabase
+    // Simpan ke database
     const { data, error } = await supabase
       .from('disease_cards')
-      .insert([
-        {
+      .insert([{
           title: gameData.title,
           difficulty: gameData.difficulty,
           correct_diagnosis: gameData.correct_diagnosis,
           scenario: gameData.scenario,
-          content: gameData 
-        }
-      ])
+          content: gameData
+      }])
       .select()
       .single();
 
@@ -114,7 +112,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, id: data.id });
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error generating game:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
