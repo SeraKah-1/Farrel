@@ -197,14 +197,9 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
         </div>
       </div>
 
-      {/* LAYOUT FIX: 
-         - Menggunakan 'lg:flex-row' bukan 'md:flex-row'. 
-         - Tablet (md) sekarang akan tetap 'flex-col' (atas-bawah) agar tidak sempit.
-         - Laptop (lg) baru berubah jadi kiri-kanan.
-      */}
       <div className="max-w-7xl mx-auto p-4 flex flex-col lg:flex-row gap-6 mt-2">
         
-        {/* --- AREA UTAMA (Energi & Chat) --- */}
+        {/* --- AREA UTAMA (Energi, Chat & Result) --- */}
         <div className="flex-1 flex flex-col gap-4 md:gap-6">
           
           {/* ENERGY BAR */}
@@ -228,7 +223,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
              </div>
           </div>
 
-          {/* CHAT AREA - Height disesuaikan agar di tablet tetap tinggi */}
+          {/* CHAT AREA */}
           <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[500px] lg:h-auto">
             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
               <User size={18} className="text-slate-400"/>
@@ -263,48 +258,93 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
             </div>
           </div>
 
-          {/* HASIL / RESULT CARD */}
+          {/* HASIL / RESULT CARD (MEDICAL WIKI STYLE) */}
           {gameState !== 'playing' && (
-            <div className="bg-white rounded-2xl shadow-xl border-t-4 border-t-blue-500 overflow-hidden animate-in zoom-in-95 duration-500 mb-6">
-               <div className="p-6 bg-blue-50/30 border-b border-slate-100">
-                  <h2 className="flex items-center gap-2 text-xl font-bold text-slate-800">
-                    <BookOpen className="text-blue-600" /> Analisis Kasus
-                  </h2>
-               </div>
-               <div className="p-6 grid md:grid-cols-2 gap-8">
+            <div className="bg-white rounded-2xl shadow-xl border-t-4 border-t-blue-600 overflow-hidden animate-in zoom-in-95 duration-500 mb-8">
+               
+               {/* Header Hasil */}
+               <div className={`p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${gameState === 'won' ? 'bg-green-50/50' : 'bg-red-50/50'}`}>
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">Diagnosa Akhir</p>
-                    <p className="text-2xl font-black text-blue-600 mb-4">{sim.diagnosis_answer}</p>
-                    <p className="text-sm md:text-base text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
-                      {wiki.definition}
-                    </p>
+                    <div className="flex items-center gap-2 mb-2">
+                       {gameState === 'won' 
+                         ? <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold uppercase tracking-wide border border-green-200">✨ Diagnosis Tepat</span>
+                         : <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold uppercase tracking-wide border border-red-200">💀 Diagnosis Meleset</span>
+                       }
+                    </div>
+                    <h2 className="text-2xl md:text-3xl font-black text-slate-800 leading-tight">
+                      {sim.diagnosis_answer}
+                    </h2>
                   </div>
-                  <div className="space-y-4">
-                     <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase mb-2">Gejala Kunci</p>
-                        <ul className="text-sm md:text-base text-slate-700 space-y-1">
+                  <div className="text-right hidden md:block">
+                     <BookOpen className="ml-auto text-slate-300 mb-1" size={32}/>
+                     <p className="text-xs text-slate-400 font-mono">ICD-10 COMPLIANT</p>
+                  </div>
+               </div>
+
+               {/* KONTEN EDUKASI (Grid Layout) */}
+               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8 bg-white">
+                  
+                  {/* KOLOM KIRI: DEFINISI & GEJALA */}
+                  <div className="space-y-6">
+                    {/* 1. Definisi */}
+                    <div className="space-y-2">
+                       <h3 className="text-sm font-bold text-blue-600 uppercase flex items-center gap-2">
+                         <Activity size={16}/> Definisi & Patofisiologi
+                       </h3>
+                       <p className="text-sm md:text-base text-slate-600 leading-relaxed text-justify">
+                         {wiki.definition}
+                       </p>
+                    </div>
+
+                    {/* 2. Gejala Klinis */}
+                    <div className="space-y-2">
+                       <h3 className="text-sm font-bold text-orange-500 uppercase flex items-center gap-2">
+                         <AlertCircle size={16}/> Tanda & Gejala Khas
+                       </h3>
+                       <ul className="bg-orange-50/50 rounded-xl p-4 border border-orange-100 space-y-2">
                           {wiki.clinical_signs?.map((s: string, i: number) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <span className="mt-2 h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0"></span>
-                              {s}
+                            <li key={i} className="flex items-start gap-3 text-sm text-slate-700">
+                              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0 shadow-sm"></span>
+                              <span className="leading-snug">{s}</span>
                             </li>
                           ))}
-                        </ul>
+                       </ul>
+                    </div>
+                  </div>
+
+                  {/* KOLOM KANAN: TATALAKSANA & NEXT STEP */}
+                  <div className="flex flex-col h-full space-y-6">
+                     
+                     {/* 3. Tatalaksana */}
+                     <div className="space-y-2 flex-1">
+                        <h3 className="text-sm font-bold text-green-600 uppercase flex items-center gap-2">
+                          <CheckCircle size={16}/> Pedoman Tatalaksana
+                        </h3>
+                        <div className="bg-green-50 p-5 rounded-xl border border-green-100 text-sm md:text-base text-green-900 leading-relaxed font-medium shadow-sm">
+                          {wiki.treatment_guideline}
+                        </div>
+                     </div>
+
+                     {/* 4. Disclaimer & Tombol */}
+                     <div className="mt-auto pt-4 border-t border-slate-100">
+                        <p className="text-[10px] text-slate-400 italic mb-4 text-center">
+                          *Simulasi ini hanya untuk tujuan edukasi dan tidak menggantikan saran medis profesional.
+                        </p>
+                        <Button 
+                          size="lg" 
+                          className="w-full h-14 text-lg font-bold shadow-xl shadow-blue-100 hover:shadow-blue-200 transition-all bg-slate-900 hover:bg-slate-800" 
+                          onClick={() => router.push('/')}
+                        >
+                          Simulasi Kasus Baru 👉
+                        </Button>
                      </div>
                   </div>
                </div>
-               <div className="p-4 bg-slate-50 flex justify-center">
-                  <Button size="lg" className="w-full md:w-auto px-8 font-bold shadow-lg shadow-blue-200 py-6 text-lg" onClick={() => router.push('/')}>
-                    Simulasi Berikutnya 👉
-                  </Button>
-               </div>
             </div>
           )}
-
         </div>
 
         {/* --- AREA KANAN (Actions) --- */}
-        {/* Di Tablet (md), width akan 100% (full). Baru di Laptop (lg) jadi sidebar 380px */}
         <div className="w-full lg:w-[380px] flex flex-col gap-4 shrink-0 pb-10">
            
            {/* WAWANCARA */}
