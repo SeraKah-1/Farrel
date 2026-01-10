@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 // ✅ Import yang sudah diperbaiki (Mundur 2 folder untuk cari utils di root)
-import { createClient } from '../../utils/supabase/client'; 
+import { createClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-// 👇 PERBAIKAN: Gunakan titik 3 kali untuk mundur ke root, lalu masuk ke utils
-import { createClient } from '../../../utils/supabase/server'; 
+// ✅ Import Correct: Mundur 3 langkah ke root utils
+import { createClient } from '@/utils/supabase/server'; 
 
+// Konfigurasi durasi timeout (Penting untuk Vercel supaya tidak putus saat AI mikir)
 export const maxDuration = 60; 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // Prompt Engineering
+    // Prompt Engineering untuk Dokter AI
     const systemPrompt = `
       Kamu adalah Dokter Senior yang ahli membuat studi kasus medis untuk mahasiswa kedokteran.
       Tugasmu adalah membuat 1 kasus pasien fiktif yang realistis.
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
         "correct_diagnosis": "Nama Penyakit (Diagnosa Benar)",
         "differential_diagnosis": ["Penyakit Salah 1", "Penyakit Salah 2", "Penyakit Salah 3"],
         "explanation": "Penjelasan medis singkat kenapa diagnosa ini benar.",
-        "difficulty": "${difficulty || 'Medium'}"
+        "difficulty": "${difficulty === 'random' ? 'Medium' : difficulty}"
       }
     `;
 
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      model: "gpt-4o-mini",
+      model: "gpt-4o-mini", // Model hemat & cepat
       response_format: { type: "json_object" },
     });
 
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     const gameData = JSON.parse(content);
 
     // Simpan ke Database Supabase
-    // 👇 PENTING: createClient ini memanggil file server.ts yang harus sudah diperbaiki (lihat poin 2 di bawah)
+    // 👇 PENTING: Gunakan await untuk Next.js versi terbaru
     const supabase = await createClient(); 
     
     const { data, error } = await supabase
@@ -66,10 +67,11 @@ export async function POST(req: Request) {
           title: gameData.title,
           difficulty: gameData.difficulty,
           correct_diagnosis: gameData.correct_diagnosis,
-          scenario: {
+          scenario: { // Simpan sisa data sebagai JSONB
             patient: gameData.patient,
             symptoms: gameData.symptoms,
             lab_results: gameData.lab_results,
+            // Gabungkan opsi benar + salah, lalu acak
             options: [gameData.correct_diagnosis, ...gameData.differential_diagnosis].sort(() => Math.random() - 0.5),
             explanation: gameData.explanation
           }
