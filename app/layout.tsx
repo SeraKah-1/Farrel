@@ -8,6 +8,8 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Medical Detective Game",
   description: "Simulasi diagnosa medis berbasis AI buatan Farrel",
+  title: "Medical Detective Game",
+  description: "Simulasi diagnosa medis berbasis AI buatan Farrel",
 };
 
 export default function RootLayout({
