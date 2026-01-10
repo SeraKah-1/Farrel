@@ -13,13 +13,14 @@ export async function POST(req: Request) {
   try {
     const supabase = createClient();
     
-    // 1. TERIMA DATA REQUEST DARI FRONTEND
+    // 1. BACA PESANAN DARI FRONTEND (TOPIC & DIFFICULTY)
     const body = await req.json().catch(() => ({}));
     const { topic, difficulty } = body; 
 
-    // 2. ATUR LOGIKA PROMPT
+    // 2. ATUR INSTRUKSI UNTUK AI
     let topicInstruction = "Pilih penyakit secara ACAK (Random) dari kategori umum atau langka.";
     
+    // Kalau ada request topik, paksa AI ikutin requestnya
     if (topic && topic.trim() !== "") {
       topicInstruction = `PENTING: Kasus INI HARUS berkaitan dengan topik/penyakit: "${topic}".`;
     }
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
       difficultyInstruction = `Tingkat kesulitan HARUS: "${difficulty}".`;
     }
 
-    // 3. SUSUN PROMPT
+    // 3. PROMPT UTAMA
     const prompt = `
       Bertindaklah sebagai Senior Dokter dosen kedokteran.
       Tugasmu: Buat 1 kasus medis untuk simulasi diagnosa.
@@ -40,27 +41,27 @@ export async function POST(req: Request) {
 
       ATURAN JUDUL (ANTI SPOILER):
       - Field "title" JANGAN PERNAH menulis nama penyakitnya!
-      - "title" HARUS berupa Keluhan Utama yang dramatis. (Contoh: "Nyeri Dada Menusuk", bukan "Serangan Jantung").
+      - "title" HARUS berupa Keluhan Utama yang dramatis. (Contoh: "Nyeri Dada Menusuk", jangan "Angina").
 
       Respon HARUS dalam format JSON murni:
       {
-        "title": "String (Keluhan Utama)",
-        "description": "String (Deskripsi awal pasien)",
+        "title": "String (Keluhan Utama - Judul Kasus)",
+        "description": "String (Deskripsi awal pasien datang)",
         "difficulty": "String (Easy/Medium/Hard)",
         "category": "String (Kategori Sistem Organ)",
-        "diagnosis": "String (Nama Penyakit - Kunci Jawaban)",
-        "explanation": "String (Penjelasan medis singkat)",
+        "diagnosis": "String (Nama Penyakit Sebenarnya - Kunci Jawaban)",
+        "explanation": "String (Penjelasan medis kenapa diagnosa ini benar)",
         "patient_profile": {
-          "name": "String",
+          "name": "String (Nama Samaran)",
           "age": Number,
           "gender": "String",
           "occupation": "String"
         },
-        "initial_chat": "String (Chat pertama pasien)"
+        "initial_chat": "String (Kalimat pertama pasien di chat)"
       }
     `;
 
-    // 4. PANGGIL AI
+    // 4. KIRIM KE OPENAI
     const completion = await openai.chat.completions.create({
       messages: [{ role: "system", content: prompt }],
       model: "gpt-4o-mini",
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
         description: gameData.description,
         difficulty: gameData.difficulty,
         category: gameData.category,
-        correct_diagnosis: gameData.diagnosis,
+        correct_diagnosis: gameData.diagnosis, // Kunci jawaban
         explanation: gameData.explanation,
         patient_profile: gameData.patient_profile,
         initial_chat: gameData.initial_chat,
