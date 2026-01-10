@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, use } from 'react';
-// Pastikan path import ini sesuai struktur folder kamu
+// Pastikan path ini benar sesuai folder projectmu
 import { createClient } from '@/utils/supabase/client'; 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Activity, Thermometer, TestTube, MessageCircle, HeartPulse, Stethoscope, BookOpen, AlertCircle, CheckCircle, Volume2 } from 'lucide-react';
+import { Activity, Thermometer, TestTube, MessageCircle, HeartPulse, Stethoscope, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import useSound from 'use-sound';
@@ -18,6 +18,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
   const supabase = createClient();
 
   // --- AUDIO HOOKS ---
+  // Pastikan file mp3 ada di folder public/sounds/ (atau hapus hook ini jika belum ada file)
   const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
   const [playCorrect] = useSound('/sounds/correct.mp3', { volume: 0.5 });
   const [playWrong] = useSound('/sounds/wrong.mp3', { volume: 0.5 });
@@ -37,53 +38,56 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
 
   useEffect(() => {
     async function fetchGame() {
-      // Simulasi delay sedikit biar Skeleton kelihatan
-      await new Promise(r => setTimeout(r, 1000)); 
+      // Delay dikit biar loading skeleton kelihatan keren
+      await new Promise(r => setTimeout(r, 800)); 
       
       const { data } = await supabase.from('disease_cards').select('*').eq('id', id).single();
       
       if (data) {
-        // --- ⚡ FITUR ADAPTER: UBAH DATA BARU JADI FORMAT LAMA ⚡ ---
+        // --- ADAPTER LOGIC: MENANGANI DATA LAMA & BARU ---
         let normalizedContent;
 
         if (data.scenario) {
-          // KASUS BARU (Data ada di kolom 'scenario')
+          // KASUS GENERATE BARU (Format Scenario)
           normalizedContent = {
             simulation: {
-              // Gunakan history pasien sebagai keluhan utama
               chief_complaint: data.scenario.patient.history,
               diagnosis_answer: data.correct_diagnosis,
               
-              // Konversi Gejala menjadi "Wawancara"
-              interview_questions: data.scenario.symptoms?.map((s: string, idx: number) => ({
-                question: `Tanya gejala klinis #${idx + 1}`,
-                answer: s,
-                is_relevant: true
-              })) || [],
+              // LOGIKA KUNCI: Gunakan dialogues jika ada, jika tidak fallback ke symptoms
+              interview_questions: data.scenario.dialogues 
+                ? data.scenario.dialogues.map((d: any) => ({
+                    question: d.question.replace('Dokter: ', ''), // Bersihkan prefix jika ada
+                    answer: d.answer.replace('Pasien: ', ''),
+                    is_relevant: true
+                  }))
+                : (data.scenario.symptoms || []).map((s: string, idx: number) => ({
+                    question: `Tanya gejala spesifik #${idx + 1}`,
+                    answer: s,
+                    is_relevant: true
+                  })),
 
-              // Konversi Lab Results agar masuk ke slot Lab (karena AI baru menggabung vitals & lab)
-              lab_abnormalities: data.scenario.lab_results?.map((res: string) => ({
-                name: "Hasil Pemeriksaan",
-                value: res
-              })) || [],
+              // Gabung Fisik & Lab ke satu tampilan agar user tidak bingung
+              lab_abnormalities: [
+                ...(data.scenario.physical_check || []).map((v: string) => ({ name: "Fisik", value: v })),
+                ...(data.scenario.lab_results || []).map((l: string) => ({ name: "Lab", value: l }))
+              ],
 
-              // Dummy Vitals (Karena AI baru sering menggabungnya di Lab)
-              // Kita set default agar tidak crash
+              // Dummy Vitals (Agar UI tidak error, karena data vitals sekarang masuk ke Fisik/Lab)
               vital_signs: {
-                systolic: 120, diastolic: 80, heart_rate: 80, temperature: 36.5, resp_rate: 18
+                systolic: 120, diastolic: 80, heart_rate: 80, temperature: 37, resp_rate: 18
               },
 
               diagnosis_options: data.scenario.options
             },
             wiki: {
               definition: data.scenario.explanation,
-              clinical_signs: data.scenario.symptoms,
-              treatment_guideline: "Lakukan penanganan sesuai prosedur medis standar."
+              clinical_signs: data.scenario.physical_check || [],
+              treatment_guideline: "Lakukan tatalaksana sesuai standar diagnosa medis."
             }
           };
         } else {
-          // KASUS LAMA (Data ada di kolom 'content' lama)
-          // Cek apakah content string atau object
+          // KASUS LAMA (Format Content JSON String)
           normalizedContent = typeof data.content === 'string' 
             ? JSON.parse(data.content) 
             : data.content;
@@ -92,9 +96,10 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
         const gameData = { ...data, content: normalizedContent };
         setCard(gameData);
         
+        // Log pembuka
         setLogs([{ 
           sender: 'System', 
-          text: `PASIEN BARU MASUK. Riwayat: "${gameData.content.simulation.chief_complaint}"`, 
+          text: `PASIEN BARU MASUK. Keluhan: "${gameData.content.simulation.chief_complaint}"`, 
           type: 'info' 
         }]);
       }
@@ -103,6 +108,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
     fetchGame();
   }, [id]);
 
+  // Auto-scroll chat
   useEffect(() => {
     const el = document.getElementById('chat-container');
     if (el) el.scrollTop = el.scrollHeight;
@@ -114,7 +120,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
 
   const consumeEnergy = (amount: number) => {
     if (energy - amount < 0) {
-      playFlatline?.(); 
+      if (playFlatline) playFlatline(); 
       toast.error("ENERGI HABIS!");
       setGameState('lost');
       addLog('System', 'Dokter kelelahan. Pasien dirujuk ke RS lain (GAME OVER).', 'alert');
@@ -127,25 +133,20 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
 
   const handleAsk = (index: number, q: any) => {
     if (gameState !== 'playing') return;
-    playClick?.();
+    if (playClick) playClick();
     if (!consumeEnergy(COSTS.ASK)) return;
 
     setAskedQuestions(prev => [...prev, index]);
     addLog('Dokter', q.question, 'chat');
     
     setTimeout(() => {
-      if (q.is_relevant) {
-        addLog('Pasien', q.answer, 'chat');
-      } else {
-        addLog('Pasien', `${q.answer} (Pasien tampak bingung)`, 'chat');
-        toast.warning("Pertanyaan kurang relevan.");
-      }
+      addLog('Pasien', q.answer, 'chat');
     }, 600);
   };
 
   const revealData = (type: 'vitals' | 'labs') => {
     if (gameState !== 'playing') return;
-    playClick?.();
+    if (playClick) playClick();
     const cost = type === 'vitals' ? COSTS.VITALS : COSTS.LABS;
     
     if (!dataRevealed[type]) {
@@ -161,18 +162,18 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
     const correctAnswer = card.content.simulation.diagnosis_answer;
     
     if (option === correctAnswer) {
-      playCorrect?.();
+      if (playCorrect) playCorrect();
       setGameState('won');
       addLog('System', `🏆 DIAGNOSA TEPAT! (${correctAnswer}). Pasien selamat.`, 'success');
       toast.success("SEMPURNA! Pasien Selamat.");
     } else {
-      playWrong?.();
+      if (playWrong) playWrong();
       const penalty = 50;
       toast.error("DIAGNOSA SALAH!");
       addLog('System', `❌ SALAH! Bukan ${option}. Kondisi pasien kritis! (-${penalty} Energi)`, 'alert');
       
       if (energy - penalty <= 0) {
-        playFlatline?.();
+        if (playFlatline) playFlatline();
         setEnergy(0);
         setGameState('lost');
         addLog('System', 'Pasien meninggal karena salah penanganan.', 'alert');
@@ -182,7 +183,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
     }
   };
 
-  // --- TAMPILAN SKELETON (LOADING) ---
+  // --- UI SKELETON (LOADING) ---
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-4 font-sans h-[calc(100vh-2rem)] flex flex-col md:flex-row gap-4">
@@ -200,7 +201,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
     );
   }
   
-  if (!card) return <div className="text-center p-10">Data Kasus Tidak Ditemukan</div>;
+  if (!card) return <div className="text-center p-10 font-bold text-red-500">Data Kasus Tidak Ditemukan / Corrupt</div>;
 
   const sim = card.content.simulation;
   const wiki = card.content.wiki;
@@ -282,7 +283,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                   <h4 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1"><AlertCircle size={12}/> Gejala Klinis</h4>
+                   <h4 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1"><AlertCircle size={12}/> Temuan Klinis</h4>
                    <ul className="text-sm text-slate-700 list-disc list-inside bg-slate-50 p-2 rounded">
                      {wiki.clinical_signs?.map((s: string, i: number) => <li key={i}>{s}</li>)}
                    </ul>
@@ -325,6 +326,7 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
                 onClick={() => handleAsk(i, q)}
                 disabled={askedQuestions.includes(i)}
               >
+                {/* TAMPILKAN PERTANYAAN DIALOG DISINI */}
                 {q.question}
               </Button>
             ))}
@@ -346,35 +348,35 @@ export default function GameRoom({ params }: { params: Promise<{ id: string }> }
               </Button>
             ) : (
               <div className="grid grid-cols-2 gap-2 text-sm bg-amber-50 p-2 rounded border border-amber-200">
-                <div><span className="text-slate-500 text-xs">Tensi</span><br/><b>{sim.vital_signs.systolic}/{sim.vital_signs.diastolic}</b></div>
-                <div><span className="text-slate-500 text-xs">Nadi</span><br/><b>{sim.vital_signs.heart_rate} bpm</b></div>
-                <div><span className="text-slate-500 text-xs">Suhu</span><br/><b>{sim.vital_signs.temperature}°C</b></div>
-                <div><span className="text-slate-500 text-xs">Napas</span><br/><b>{sim.vital_signs.resp_rate} x/m</b></div>
+                {/* Kita hardcode vitals default karena data sudah pindah ke Lab/Fisik */}
+                <div><span className="text-slate-500 text-xs">Tensi</span><br/><b>120/80</b></div>
+                <div><span className="text-slate-500 text-xs">Nadi</span><br/><b>80 bpm</b></div>
+                <div><span className="text-slate-500 text-xs">Suhu</span><br/><b>37°C</b></div>
+                <div><span className="text-slate-500 text-xs">Napas</span><br/><b>18 x/m</b></div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* LAB */}
+        {/* LAB / FISIK */}
         <Card className={`border-l-4 border-l-purple-500 transition-all duration-500 ${gameState !== 'playing' ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
           <CardHeader className="py-2 px-4 bg-purple-50/50">
             <CardTitle className="text-sm text-purple-800 flex justify-between items-center">
-              <span className="flex items-center gap-2"><TestTube size={16}/> Laboratorium</span>
+              <span className="flex items-center gap-2"><TestTube size={16}/> Lab & Fisik</span>
               <span className="text-xs bg-purple-200 px-2 py-0.5 rounded text-purple-800">-{COSTS.LABS} AP</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-3">
             {!dataRevealed.labs ? (
               <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" onClick={() => revealData('labs')}>
-                Ambil Sampel Darah
+                Cek Lab Lengkap
               </Button>
             ) : (
               <div className="bg-purple-50 p-2 rounded border border-purple-200 text-xs space-y-2">
                 <p className="font-bold text-purple-900 border-b border-purple-200 pb-1">HASIL PEMERIKSAAN:</p>
                 {sim.lab_abnormalities?.length > 0 ? sim.lab_abnormalities.map((lab: any, i: number) => (
                   <div key={i} className="flex justify-between items-center">
-                    <span>{lab.name}</span>
-                    <span className="font-bold text-red-600 bg-red-50 px-1 rounded">{lab.value}</span>
+                    <span className="text-slate-600 font-semibold">{lab.value}</span>
                   </div>
                 )) : <p className="text-slate-500 italic">Tidak ditemukan kelainan spesifik.</p>}
               </div>

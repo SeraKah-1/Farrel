@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@/utils/supabase/server'; 
 
-// GUNAKAN EDGE RUNTIME BIAR TIDAK TIMEOUT DI VERCEL
+// --- PENTING: EDGE RUNTIME (Supaya Vercel tidak timeout) ---
 export const runtime = 'edge'; 
 export const dynamic = 'force-dynamic';
 
@@ -14,38 +14,45 @@ export async function POST(req: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // 1. Prompt Engineering System
+    // --- PROMPT BARU: MEMAKSA AI MEMBUAT DIALOG ---
     const systemPrompt = `
-      Kamu adalah Dokter Senior. Buat 1 kasus pasien fiktif realistis untuk mahasiswa kedokteran.
+      Kamu adalah Dokter Senior. Buat 1 kasus pasien fiktif realistis untuk simulasi medis.
       
-      Format output HARUS JSON valid:
+      Format output HARUS JSON valid dengan struktur ini:
       {
         "title": "Judul Kasus (Singkat)",
         "patient": {
-          "name": "Nama",
+          "name": "Nama Pasien",
           "age": 30,
           "gender": "Laki-laki/Perempuan",
-          "history": "Narasi lengkap keluhan pasien dan riwayat penyakit (Ini akan jadi soal utama)."
+          "history": "Narasi lengkap keluhan utama pasien (Storytelling awal)."
         },
-        "symptoms": ["Gejala 1", "Gejala 2"],
-        "lab_results": ["Tensi: 120/80", "Leukosit: 10.000"],
-        "correct_diagnosis": "Diagnosa Benar",
-        "differential_diagnosis": ["Diagnosa Salah 1", "Diagnosa Salah 2"],
-        "explanation": "Penjelasan medis singkat.",
+        "dialogues": [
+           { "question": "Dokter: Sejak kapan Anda merasa demam?", "answer": "Pasien: Sudah 3 hari dok, naik turun.", "type": "history" },
+           { "question": "Dokter: Apa ada keluhan nyeri di tempat lain?", "answer": "Pasien: Ada dok, nyeri sendi rasanya linu semua.", "type": "symptom" },
+           { "question": "Dokter: Apakah Anda baru bepergian?", "answer": "Pasien: Tidak dok, saya di rumah saja.", "type": "risk" },
+           { "question": "Dokter: Ada riwayat alergi obat?", "answer": "Pasien: Tidak ada dok.", "type": "history" }
+           // Buat minimal 5-6 pertanyaan variatif
+        ],
+        "physical_check": ["Suhu: 38.5C", "Tensi: 110/70 mmHg", "Nadi: 98x/m", "Kulit: Bintik merah (Petechiae) di lengan"],
+        "lab_results": ["Trombosit: 85.000 (Rendah)", "Leukosit: 3.200 (Rendah)", "Hematokrit: 45% (Meningkat)"],
+        "correct_diagnosis": "Diagnosa Benar (Nama Penyakit)",
+        "differential_diagnosis": ["Diagnosa Salah 1", "Diagnosa Salah 2", "Diagnosa Salah 3"],
+        "explanation": "Penjelasan medis singkat kenapa diagnosa ini benar.",
         "difficulty": "${difficulty === 'random' ? 'Medium' : difficulty}"
       }
     `;
 
     const userPrompt = topic 
-      ? `Kasus penyakit: ${topic}. Kesulitan: ${difficulty}.`
-      : `Kasus penyakit umum di Indonesia. Kesulitan: ${difficulty}.`;
+      ? `Buat kasus spesifik tentang: ${topic}. Level kesulitan: ${difficulty}.`
+      : `Buat kasus penyakit dalam umum di Indonesia. Level kesulitan: ${difficulty}.`;
 
     const completion = await openai.chat.completions.create({
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      model: "gpt-4o-mini",
+      model: "gpt-4o-mini", // Model cepat & hemat
       response_format: { type: "json_object" },
     });
 
@@ -54,7 +61,7 @@ export async function POST(req: Request) {
 
     const gameData = JSON.parse(contentStr);
 
-    // 2. Simpan ke Database
+    // Simpan ke Database
     const supabase = await createClient(); 
     
     const { data, error } = await supabase
@@ -65,16 +72,13 @@ export async function POST(req: Request) {
           category: topic || "Umum",
           difficulty: gameData.difficulty,
           correct_diagnosis: gameData.correct_diagnosis,
-          
-          // --- PERBAIKAN DISINI ---
-          // Kita isi kolom 'content' dengan narasi history pasien
-          // Supaya Frontend tidak error saat mau menampilkan soal
+          // Isi content dengan history agar list di frontend tidak error
           content: gameData.patient.history, 
-          // ------------------------
-
+          // Simpan data lengkap di kolom scenario
           scenario: { 
             patient: gameData.patient,
-            symptoms: gameData.symptoms,
+            dialogues: gameData.dialogues, // <-- INI KUNCI INTERAKSI
+            physical_check: gameData.physical_check,
             lab_results: gameData.lab_results,
             options: [gameData.correct_diagnosis, ...gameData.differential_diagnosis].sort(() => Math.random() - 0.5),
             explanation: gameData.explanation
