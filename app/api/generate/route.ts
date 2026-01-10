@@ -1,17 +1,13 @@
-// Tambahkan ini biar Vercel kasih waktu napas sampai 60 detik (maksimal di Hobby Plan)
-export const maxDuration = 60;
-
-export async function POST(req: Request) {
-  // ... kodingan lama kamu ...
-}
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-// ✅ Import Correct: Mundur 3 langkah ke root utils
 import { createClient } from '@/utils/supabase/server'; 
 
-// Konfigurasi durasi timeout (Penting untuk Vercel supaya tidak putus saat AI mikir)
-export const maxDuration = 60; 
+// --- BAGIAN INI SUDAH DIPERBAIKI ---
+// Kita pakai 'edge' runtime biar lebih cepat dan tidak kena limit 10 detik Node.js biasa
+export const runtime = 'edge'; 
+// export const maxDuration = 60; <--- INI SUDAH SAYA HAPUS KARENA ILEGAL DI AKUN GRATIS
 export const dynamic = 'force-dynamic';
+// -----------------------------------
 
 export async function POST(req: Request) {
   try {
@@ -63,7 +59,6 @@ export async function POST(req: Request) {
     const gameData = JSON.parse(content);
 
     // Simpan ke Database Supabase
-    // 👇 PENTING: Gunakan await untuk Next.js versi terbaru
     const supabase = await createClient(); 
     
     const { data, error } = await supabase
@@ -73,7 +68,7 @@ export async function POST(req: Request) {
           title: gameData.title,
           difficulty: gameData.difficulty,
           correct_diagnosis: gameData.correct_diagnosis,
-          scenario: { // Simpan sisa data sebagai JSONB
+          scenario: { 
             patient: gameData.patient,
             symptoms: gameData.symptoms,
             lab_results: gameData.lab_results,
