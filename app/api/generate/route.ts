@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@/utils/supabase/server'; 
 
-// --- PENTING: EDGE RUNTIME (Supaya Vercel tidak timeout) ---
+// --- KONFIGURASI EDGE RUNTIME (Wajib untuk Vercel Free Tier) ---
 export const runtime = 'edge'; 
 export const dynamic = 'force-dynamic';
 
@@ -14,13 +14,13 @@ export async function POST(req: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // --- PROMPT BARU: MEMAKSA AI MEMBUAT DIALOG ---
+    // --- PROMPT BARU: ANTI SPOILER & DIALOGUE ORIENTED ---
     const systemPrompt = `
       Kamu adalah Dokter Senior. Buat 1 kasus pasien fiktif realistis untuk simulasi medis.
       
       Format output HARUS JSON valid dengan struktur ini:
       {
-        "title": "Judul Kasus (Singkat)",
+        "title": "Judul Kasus (Gunakan format klinis: '[Jenis Kelamin] [Usia] dengan [Keluhan Utama]'. CONTOH: 'Wanita 25 Tahun dengan Demam Naik Turun'. PENTING: JANGAN TULIS NAMA PENYAKIT DI JUDUL!)",
         "patient": {
           "name": "Nama Pasien",
           "age": 30,
@@ -28,14 +28,13 @@ export async function POST(req: Request) {
           "history": "Narasi lengkap keluhan utama pasien (Storytelling awal)."
         },
         "dialogues": [
-           { "question": "Dokter: Sejak kapan Anda merasa demam?", "answer": "Pasien: Sudah 3 hari dok, naik turun.", "type": "history" },
-           { "question": "Dokter: Apa ada keluhan nyeri di tempat lain?", "answer": "Pasien: Ada dok, nyeri sendi rasanya linu semua.", "type": "symptom" },
-           { "question": "Dokter: Apakah Anda baru bepergian?", "answer": "Pasien: Tidak dok, saya di rumah saja.", "type": "risk" },
-           { "question": "Dokter: Ada riwayat alergi obat?", "answer": "Pasien: Tidak ada dok.", "type": "history" }
-           // Buat minimal 5-6 pertanyaan variatif
+           { "question": "Dokter: Sejak kapan Anda merasa keluhan ini?", "answer": "Pasien: ...", "type": "history" },
+           { "question": "Dokter: Apakah ada gejala lain yang dirasakan?", "answer": "Pasien: ...", "type": "symptom" },
+           { "question": "Dokter: Apakah ada riwayat penyakit sebelumnya?", "answer": "Pasien: ...", "type": "history" }
+           // Buat minimal 5-6 pertanyaan variatif (History, Symptom, Risk Factor)
         ],
-        "physical_check": ["Suhu: 38.5C", "Tensi: 110/70 mmHg", "Nadi: 98x/m", "Kulit: Bintik merah (Petechiae) di lengan"],
-        "lab_results": ["Trombosit: 85.000 (Rendah)", "Leukosit: 3.200 (Rendah)", "Hematokrit: 45% (Meningkat)"],
+        "physical_check": ["Tensi: ...", "Suhu: ...", "Temuan fisik spesifik..."],
+        "lab_results": ["Hb: ...", "Leukosit: ...", "Hasil lab penunjang..."],
         "correct_diagnosis": "Diagnosa Benar (Nama Penyakit)",
         "differential_diagnosis": ["Diagnosa Salah 1", "Diagnosa Salah 2", "Diagnosa Salah 3"],
         "explanation": "Penjelasan medis singkat kenapa diagnosa ini benar.",
@@ -52,7 +51,7 @@ export async function POST(req: Request) {
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      model: "gpt-4o-mini", // Model cepat & hemat
+      model: "gpt-4o-mini", // Model hemat & cepat
       response_format: { type: "json_object" },
     });
 
@@ -68,16 +67,18 @@ export async function POST(req: Request) {
       .from('disease_cards')
       .insert([
         {
-          title: gameData.title,
+          title: gameData.title, // Judul sudah aman (Anti-Spoiler)
           category: topic || "Umum",
           difficulty: gameData.difficulty,
           correct_diagnosis: gameData.correct_diagnosis,
-          // Isi content dengan history agar list di frontend tidak error
+          
+          // Isi content dengan history agar list di frontend lama tidak error
           content: gameData.patient.history, 
-          // Simpan data lengkap di kolom scenario
+          
+          // Simpan data lengkap di kolom scenario (JSONB)
           scenario: { 
             patient: gameData.patient,
-            dialogues: gameData.dialogues, // <-- INI KUNCI INTERAKSI
+            dialogues: gameData.dialogues, 
             physical_check: gameData.physical_check,
             lab_results: gameData.lab_results,
             options: [gameData.correct_diagnosis, ...gameData.differential_diagnosis].sort(() => Math.random() - 0.5),
