@@ -1,3 +1,9 @@
+// Tambahkan ini biar Vercel kasih waktu napas sampai 60 detik (maksimal di Hobby Plan)
+export const maxDuration = 60;
+
+export async function POST(req: Request) {
+  // ... kodingan lama kamu ...
+}
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 // ✅ Import Correct: Mundur 3 langkah ke root utils
