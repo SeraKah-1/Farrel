@@ -6,7 +6,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// DAFTAR TOPIK AGAR TIDAK MELULU JANTUNG
+// Daftar Topik Variatif (Agar tidak melulu Jantung)
 const RANDOM_TOPICS = [
   "Neurologi (Saraf, Stroke, Vertigo)",
   "Gastroenterohepatologi (Lambung, Usus, Hati)",
@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     let { topic, difficulty } = await request.json();
 
     // --- LOGIKA GACHA TOPIK ---
+    // Jika user memilih 'Acak' atau kosong, pilih salah satu dari list di atas
     let activeTopic = topic;
     const isRandomMode = !topic || topic.toLowerCase() === 'acak' || topic.toLowerCase() === 'random';
 
@@ -38,84 +39,72 @@ export async function POST(request: Request) {
     
     const activeDifficulty = difficulty || 'Medium';
 
+    // --- SYSTEM PROMPT ---
     const systemPrompt = `
-      Anda adalah Senior Medical Educator. Tugas Anda membuat simulasi kasus klinis yang REALISTIS.
+      Anda adalah Senior Medical Educator. Tugas: Buat simulasi kasus klinis untuk mahasiswa kedokteran.
       
       KONTEKS:
       - Topik: ${activeTopic} ${isRandomMode ? '(JANGAN buat kasus Nyeri Dada/Jantung kecuali topik eksplisit Kardiologi)' : ''}
       - Kesulitan: ${activeDifficulty}
       
-      OUTPUT HARUS JSON (Tanpa markdown) DENGAN STRUKTUR INI:
+      ATURAN JSON (OUTPUT HARUS JSON MURNI TANPA MARKDOWN):
+      1. Field 'case_title' HARUS BERISI: "Kasus [Nama Pasien] - [Keluhan Utama]". JANGAN TULIS DIAGNOSIS DISINI.
+      2. Field 'correct_diagnosis' adalah kunci jawaban rahasia.
+      3. Anamnesis harus ada 6 pertanyaan (3 Relevan, 2 Noise/Sampah, 1 Jebakan).
+      
+      STRUKTUR JSON TARGET:
       {
-        "title": "Nama Diagnosis Medis (Contoh: Demam Tifoid)",
+        "meta": {
+           "case_title": "Kasus Bpk. [Nama] - [Keluhan]", 
+           "difficulty": "${activeDifficulty}"
+        },
         "patient": {
-           "name": "Nama Indonesia (Contoh: Bpk. Budi / Ibu Siti)",
+           "name": "Nama Indonesia (Natural)",
            "age": "Angka Usia",
-           "job": "Pekerjaan (Relevan dengan penyakit/sosial)",
-           "chief_complaint": "Keluhan Utama (Singkat)",
-           "history_now": "Narasi RPS lengkap 2-3 kalimat."
+           "job": "Pekerjaan Pasien",
+           "chief_complaint": "Keluhan utama singkat",
+           "history_now": "Narasi RPS lengkap (2-3 kalimat)."
         },
         "anamnesis": [
-           // WAJIB ADA 6 PERTANYAAN:
-           // 3 Pertanyaan Relevan (Kunci Diagnosis)
-           // 2 Pertanyaan Noise/Sampah (Basa-basi/Tidak relevan)
-           // 1 Pertanyaan Red Herring (Pengecoh/Menjebak ke diagnosis lain)
-           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "relevant" },
-           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "relevant" },
-           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "relevant" },
-           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "noise" },
-           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "noise" },
-           { "question": "Pertanyaan...", "answer": "Jawaban pasien...", "type": "trap" }
+           { "question": "Pertanyaan...", "answer": "Jawaban...", "type": "relevant" },
+           { "question": "Pertanyaan...", "answer": "Jawaban...", "type": "relevant" },
+           { "question": "Pertanyaan...", "answer": "Jawaban...", "type": "relevant" },
+           { "question": "Pertanyaan...", "answer": "Jawaban...", "type": "noise" },
+           { "question": "Pertanyaan...", "answer": "Jawaban...", "type": "noise" },
+           { "question": "Pertanyaan...", "answer": "Jawaban...", "type": "trap" }
         ],
         "examinations": {
            "physical": {
-              "vitals": { 
-                 "bp": "120/80 mmHg (sesuaikan)", 
-                 "hr": "80 bpm (sesuaikan)", 
-                 "temp": "36.5 C (sesuaikan)", 
-                 "rr": "20 x/m", 
-                 "spo2": "98%" 
-              },
-              "observations": [
-                 "Array string temuan fisik (Inspeksi/Palpasi/Auskultasi).",
-                 "Contoh: Konjungtiva anemis",
-                 "Contoh: Ronkhi basah kasar di paru kanan"
-              ]
+              "vitals": { "bp": "120/80 mmHg", "hr": "80 bpm", "temp": "36.5 C", "rr": "20 x/m", "spo2": "98%" },
+              "observations": ["Temuan fisik 1", "Temuan fisik 2"]
            },
            "labs": [
-              // Array object hasil penunjang (Lab Darah/Rontgen/EKG)
-              // Campur antara yg Abnormal (Kunci) dan Normal (Pengecoh)
-              { "name": "Hemoglobin", "result": "10 g/dL (Rendah)" },
-              { "name": "Leukosit", "result": "15.000 /uL (Tinggi)" },
-              { "name": "GDS", "result": "110 mg/dL (Normal)" }
+              { "name": "Nama Tes 1", "result": "Hasil (Abnormal)" },
+              { "name": "Nama Tes 2", "result": "Hasil (Normal)" },
+              { "name": "Nama Tes 3", "result": "Hasil" }
            ]
         },
         "diagnosis": {
-           "correct_answer": "Diagnosis Benar (Sama dengan title)",
+           "correct_answer": "NAMA PENYAKIT (DIAGNOSIS PASTI)", 
            "options": [
               "Diagnosis Benar",
-              "Diagnosis Banding 1 (Gejala mirip)",
-              "Diagnosis Banding 2 (Gejala mirip)",
-              "Diagnosis Pengecoh (Agak beda)"
+              "Diagnosis Banding 1",
+              "Diagnosis Banding 2",
+              "Diagnosis Pengecoh"
            ]
         },
         "wiki": {
-           "definition": "Penjelasan medis penyakit ini.",
-           "pathophysiology": "Mekanisme penyakit secara ilmiah (Medical Textbook style).",
-           "clinical_signs": ["Tanda khas 1", "Tanda khas 2"],
-           "treatment": [
-              "Tatalaksana 1 (Non-farmako)",
-              "Tatalaksana 2 (Obat spesifik & Dosis)",
-              "Tatalaksana 3 (Rujuk/Tindakan)"
-           ]
+           "definition": "Definisi medis lengkap.",
+           "pathophysiology": "Patofisiologi ilmiah.",
+           "treatment": ["Langkah 1", "Langkah 2 (Obat)", "Langkah 3"]
         }
       }
     `;
 
     const completion = await openai.chat.completions.create({
       messages: [{ role: "system", content: systemPrompt }],
-      model: "gpt-4o-mini",
-      temperature: 0.85, // Kreativitas tinggi
+      model: "gpt-4o-mini", // Model cepat & pintar
+      temperature: 0.85,    // Kreativitas tinggi agar variatif
       response_format: { type: "json_object" }
     });
 
@@ -124,14 +113,15 @@ export async function POST(request: Request) {
     
     const gameData = JSON.parse(content);
 
-    // Simpan ke database
+    // Simpan ke database Supabase
+    // Kita simpan 'correct_answer' di kolom terpisah agar aman
     const { data, error } = await supabase
       .from('disease_cards')
       .insert([{
-          title: gameData.title,
+          title: gameData.meta.case_title, // Judul Aman (Misal: Kasus Bpk Budi)
           difficulty: activeDifficulty,
-          correct_diagnosis: gameData.diagnosis.correct_answer,
-          scenario: gameData, // Simpan JSON structure baru langsung ke scenario
+          correct_diagnosis: gameData.diagnosis.correct_answer, // Jawaban Asli
+          scenario: gameData, // Simpan JSON lengkap
           content: gameData   // Backup
       }])
       .select()
