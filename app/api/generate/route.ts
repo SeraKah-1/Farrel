@@ -2,22 +2,23 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@/utils/supabase/server'; 
 
-// --- BAGIAN INI SUDAH DIPERBAIKI ---
-// Kita pakai 'edge' runtime biar lebih cepat dan tidak kena limit 10 detik Node.js biasa
+// --- KONFIGURASI EDGE RUNTIME ---
+// Penting: Gunakan 'edge' agar tidak timeout di akun Vercel gratis
 export const runtime = 'edge'; 
-// export const maxDuration = 60; <--- INI SUDAH SAYA HAPUS KARENA ILEGAL DI AKUN GRATIS
 export const dynamic = 'force-dynamic';
-// -----------------------------------
+// --------------------------------
 
 export async function POST(req: Request) {
   try {
+    // Ambil input dari user
     const { topic, difficulty } = await req.json();
 
+    // Inisialisasi OpenAI
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // Prompt Engineering untuk Dokter AI
+    // 1. Prompt Engineering System (Otak Dokter)
     const systemPrompt = `
       Kamu adalah Dokter Senior yang ahli membuat studi kasus medis untuk mahasiswa kedokteran.
       Tugasmu adalah membuat 1 kasus pasien fiktif yang realistis.
@@ -40,25 +41,28 @@ export async function POST(req: Request) {
       }
     `;
 
+    // 2. Prompt User (Topik Spesifik)
     const userPrompt = topic 
       ? `Buat kasus spesifik tentang penyakit: ${topic}. Level kesulitan: ${difficulty}.`
       : `Buat kasus penyakit penyakit umum di Indonesia (misal: Tropis, Infeksi, Metabolik). Level kesulitan: ${difficulty}.`;
 
+    // 3. Request ke OpenAI
     const completion = await openai.chat.completions.create({
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       model: "gpt-4o-mini", // Model hemat & cepat
-      response_format: { type: "json_object" },
+      response_format: { type: "json_object" }, // Memaksa output JSON rapi
     });
 
     const content = completion.choices[0].message.content;
     if (!content) throw new Error("AI tidak memberikan respon");
 
+    // 4. Parsing Data JSON dari AI
     const gameData = JSON.parse(content);
 
-    // Simpan ke Database Supabase
+    // 5. Simpan ke Database Supabase
     const supabase = await createClient(); 
     
     const { data, error } = await supabase
@@ -66,13 +70,21 @@ export async function POST(req: Request) {
       .insert([
         {
           title: gameData.title,
+          
+          // --- FIX ERROR DATABASE DI SINI ---
+          // Kita isi category dengan input topic, atau default 'Umum' kalau kosong
+          category: topic || "Umum", 
+          // ----------------------------------
+
           difficulty: gameData.difficulty,
           correct_diagnosis: gameData.correct_diagnosis,
+          
+          // Data detail masuk ke kolom JSONB bernama 'scenario'
           scenario: { 
             patient: gameData.patient,
             symptoms: gameData.symptoms,
             lab_results: gameData.lab_results,
-            // Gabungkan opsi benar + salah, lalu acak
+            // Acak urutan jawaban (Benar + Salah) biar tidak ketebak
             options: [gameData.correct_diagnosis, ...gameData.differential_diagnosis].sort(() => Math.random() - 0.5),
             explanation: gameData.explanation
           }
@@ -81,11 +93,13 @@ export async function POST(req: Request) {
       .select()
       .single();
 
+    // Cek jika Supabase error
     if (error) {
       console.error('Supabase Error:', error);
-      throw new Error("Gagal menyimpan ke database");
+      throw new Error(`Gagal menyimpan ke database: ${error.message}`);
     }
 
+    // Sukses! Kembalikan ID kasus ke frontend
     return NextResponse.json({ success: true, id: data.id });
 
   } catch (error: any) {
